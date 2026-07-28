@@ -1,0 +1,3 @@
+barcode,game_name,platform,region,edition,language,publisher,release_year,cover_filename,aliases,source,verified,notes
+00000000,示例假数据-请删除,PS5,UNKNOWN,示例版,中文,示例发行商,2099,,假数据游戏,template,false,此行仅用于演示，不对应真实商品
+00000000000001,示例假数据二-请删除,SWITCH2,UNKNOWN,,,,,,,template,false,此行仅用于演示，不对应真实商品
