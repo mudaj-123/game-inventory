@@ -32,6 +32,9 @@ packages = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "postgres: requires TEST_POSTGRES_URL and validates PostgreSQL concurrency",
+]
 
 [tool.ruff]
 target-version = "py312"

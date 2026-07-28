@@ -38,3 +38,18 @@ def test_scanner_supports_hid_terminators_and_string_barcode_validation() -> Non
     assert 'event.key === "Enter" || event.key === "Tab"' in source
     assert "/^[0-9]{8,14}$/" in source
     assert "parseInt" not in source
+    assert 'fetch("/api/scans"' in source
+    assert "/api/inventory/scans" not in source
+
+
+def test_unknown_barcode_form_and_business_status_handling() -> None:
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="unknown-form"' in html
+    assert 'id="unknown-barcode"' in html and "readonly" in html
+    assert all(f'value="{platform}"' in html for platform in ("PS5", "PS4", "SWITCH", "SWITCH2"))
+    assert 'payload.status === "SUCCESS"' in source
+    assert 'payload.status === "OUT_OF_STOCK"' in source
+    assert 'payload.status === "UNKNOWN_BARCODE_REQUIRES_INPUT"' in source
+    assert 'fetch("/api/scans/resolve-unknown"' in source

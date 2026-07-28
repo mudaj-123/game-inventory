@@ -11,12 +11,16 @@
   const networkStatus = document.querySelector("#network-status");
   const manualForm = document.querySelector("#manual-form");
   const manualBarcode = document.querySelector("#manual-barcode");
+  const unknownForm = document.querySelector("#unknown-form");
+  const unknownBarcode = document.querySelector("#unknown-barcode");
+  const unknownGameName = document.querySelector("#unknown-game-name");
   let mode = null;
   let keyBuffer = "";
   let submitting = false;
+  let pendingUnknownScanId = null;
 
   const focusScanner = () => {
-    if (mode && manualForm.hidden && !submitting) {
+    if (mode && manualForm.hidden && unknownForm.hidden && !submitting) {
       scannerInput.focus({ preventScroll: true });
       readyState.textContent = "扫码枪已就绪";
     }
@@ -66,20 +70,39 @@
     }
 
     submitting = true;
+    const clientScanId = crypto.randomUUID();
     readyState.textContent = "正在提交…";
     showResult(`正在处理条码 ${barcode}…`);
     try {
-      const response = await fetch("/api/inventory/scans", {
+      const response = await fetch("/api/scans", {
         method: "POST",
         cache: "no-store",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ barcode, operation: mode, client_scan_id: crypto.randomUUID() }),
+        body: JSON.stringify({ barcode, operation: mode, client_scan_id: clientScanId }),
       });
       const payload = await response.json().catch(() => ({}));
-      const message = payload.message || (response.ok ? "扫码处理成功" : "扫码处理失败");
-      showResult(message, response.ok ? "success" : "error");
-      speak(message);
+      if (!response.ok) {
+        const message = payload.message || "扫码处理失败";
+        showResult(message, "error");
+        speak(message);
+      } else if (payload.status === "SUCCESS") {
+        showResult(payload.message || "扫码处理成功", "success");
+        speak(payload.message || "扫码处理成功");
+      } else if (payload.status === "OUT_OF_STOCK") {
+        showResult(payload.message || "库存不足，无法出库", "error");
+        speak(payload.message || "库存不足，无法出库");
+      } else if (payload.status === "UNKNOWN_BARCODE_REQUIRES_INPUT" && mode === "IN") {
+        pendingUnknownScanId = clientScanId;
+        unknownBarcode.value = barcode;
+        unknownForm.hidden = false;
+        showResult("未找到该条码，请补充商品资料", "error");
+        unknownGameName.focus();
+      } else {
+        const message = payload.message || "扫码返回未知状态，请重试";
+        showResult(message, "error");
+        speak(message);
+      }
     } catch (_error) {
       const message = "网络请求失败，请检查连接后重试";
       showResult(message, "error");
@@ -113,7 +136,7 @@
   });
 
   document.addEventListener("keydown", (event) => {
-    if (!mode || !manualForm.hidden || submitting) return;
+    if (!mode || !manualForm.hidden || !unknownForm.hidden || submitting) return;
     if (event.key === "Enter" || event.key === "Tab") {
       event.preventDefault();
       finishBufferedScan();
@@ -141,6 +164,57 @@
     manualBarcode.value = "";
     manualForm.hidden = true;
     void submitBarcode(barcode);
+  });
+  unknownForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!pendingUnknownScanId || submitting) return;
+    submitting = true;
+    const form = new FormData(unknownForm);
+    const request = {
+      barcode: unknownBarcode.value,
+      game_name: String(form.get("game_name") || "").trim(),
+      platform: form.get("platform"),
+      region: String(form.get("region") || "").trim() || "UNKNOWN",
+      edition: String(form.get("edition") || "").trim() || null,
+      operation: "IN",
+      client_scan_id: pendingUnknownScanId,
+    };
+    readyState.textContent = "正在登记…";
+    try {
+      const response = await fetch("/api/scans/resolve-unknown", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload.status === "SUCCESS") {
+        const message = `${payload.game_name}（${payload.platform}），入库成功，当前库存 ${payload.quantity_after} 件。`;
+        showResult(message, "success");
+        speak(message);
+        unknownForm.reset();
+        unknownForm.hidden = true;
+        pendingUnknownScanId = null;
+      } else {
+        const message = payload.message || "商品登记失败，请检查后重试";
+        showResult(message, "error");
+        speak(message);
+      }
+    } catch (_error) {
+      showResult("网络请求失败，补录内容仍保留，请重试", "error");
+    } finally {
+      submitting = false;
+      readyState.textContent = "扫码枪已就绪";
+      if (unknownForm.hidden) focusScanner();
+    }
+  });
+  document.querySelector("#unknown-cancel").addEventListener("click", () => {
+    unknownForm.reset();
+    unknownForm.hidden = true;
+    pendingUnknownScanId = null;
+    showResult("已取消补录，未产生库存变化");
+    focusScanner();
   });
   scanPanel.addEventListener("click", (event) => {
     if (!event.target.closest("button, input, form")) focusScanner();
