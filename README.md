@@ -64,7 +64,7 @@ DATABASE_URL=postgresql+asyncpg://inventory_user:password@db:5432/inventory
 ## 安装与后续启动
 
 准备好 Python 3.12 后，可使用已验证的安装脚本创建虚拟环境、安装开发依赖、
-复制首次使用的环境变量模板并运行数据库迁移：
+复制首次使用的环境变量模板、运行数据库迁移，并执行测试与静态检查：
 
 ```bash
 ./scripts/setup.sh
@@ -75,6 +75,8 @@ uvicorn app.main:app --reload
 脚本仅支持 Python 3.12，任何步骤失败都会返回非零退出码；已有 `.env` 不会被覆盖。
 如果系统安装了 `uv`，脚本会使用已提交的锁文件进行可复现安装，否则回退到 `pip`。
 可通过 `PYTHON_BIN` 指定 Python 3.12 命令，通过 `VENV_DIR` 指定虚拟环境目录。
+需要快速准备环境而暂不执行 pytest 和 Ruff 时，可传入 `--skip-checks`；使用 `--help`
+可查看脚本参数。
 Windows 用户可按原步骤手工创建虚拟环境并执行 `python -m pip install -e '.[dev]'`。
 
 浏览器访问 `http://127.0.0.1:8000/health`，预期返回应用状态。当前尚无业务迁移，所以 `alembic upgrade head` 只用于验证迁移环境；下一阶段创建模型后才会生成首个版本。
