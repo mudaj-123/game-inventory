@@ -11,12 +11,16 @@
   const networkStatus = document.querySelector("#network-status");
   const manualForm = document.querySelector("#manual-form");
   const manualBarcode = document.querySelector("#manual-barcode");
+  const unknownForm = document.querySelector("#unknown-form");
+  const unknownBarcode = document.querySelector("#unknown-barcode");
+  const unknownGameName = document.querySelector("#unknown-game-name");
   let mode = null;
   let keyBuffer = "";
   let submitting = false;
+  let unknownScanId = null;
 
   const focusScanner = () => {
-    if (mode && manualForm.hidden && !submitting) {
+    if (mode && manualForm.hidden && unknownForm.hidden && !submitting) {
       scannerInput.focus({ preventScroll: true });
       readyState.textContent = "扫码枪已就绪";
     }
@@ -69,17 +73,30 @@
     readyState.textContent = "正在提交…";
     showResult(`正在处理条码 ${barcode}…`);
     try {
+      const clientScanId = crypto.randomUUID();
       const response = await fetch("/api/scans", {
         method: "POST",
         cache: "no-store",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ barcode, operation: mode, client_scan_id: crypto.randomUUID() }),
+        body: JSON.stringify({ barcode, operation: mode, client_scan_id: clientScanId }),
       });
       const payload = await response.json().catch(() => ({}));
-      const message = payload.message || (response.ok ? "扫码处理成功" : "扫码处理失败");
-      showResult(message, response.ok ? "success" : "error");
-      speak(message);
+      const message = payload.message || payload.detail || "扫码处理失败";
+      if (payload.status === "SUCCESS") {
+        showResult(message, "success");
+        speak(message);
+      } else if (payload.status === "UNKNOWN_BARCODE_REQUIRES_INPUT") {
+        showResult(message, "error");
+        unknownScanId = clientScanId;
+        unknownBarcode.value = payload.barcode || barcode;
+        unknownForm.hidden = false;
+        unknownGameName.focus();
+      } else {
+        // OUT_OF_STOCK and every unknown business status are failures even on HTTP 200.
+        showResult(message, "error");
+        speak(message);
+      }
     } catch (_error) {
       const message = "网络请求失败，请检查连接后重试";
       showResult(message, "error");
@@ -92,6 +109,58 @@
       focusScanner();
     }
   };
+
+  const closeUnknownForm = () => {
+    unknownForm.reset();
+    unknownForm.hidden = true;
+    unknownScanId = null;
+    focusScanner();
+  };
+
+  unknownForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!unknownScanId || submitting) return;
+    submitting = true;
+    const fields = new FormData(unknownForm);
+    const body = {
+      barcode: String(fields.get("barcode")),
+      operation: "IN",
+      client_scan_id: unknownScanId,
+      game_name: String(fields.get("game_name")).trim(),
+      platform: String(fields.get("platform")),
+      region: String(fields.get("region")).trim() || "UNKNOWN",
+      edition: String(fields.get("edition")).trim() || null,
+    };
+    try {
+      const response = await fetch("/api/scans/resolve-unknown", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (payload.status === "SUCCESS") {
+        const message = `${payload.game_name}（${payload.platform}），入库成功，当前库存 ${payload.quantity_after} 件。`;
+        showResult(message, "success");
+        speak(message);
+        closeUnknownForm();
+      } else {
+        const message = payload.message || payload.detail || "未知条码补录失败";
+        showResult(message, "error");
+        speak(message);
+      }
+    } catch (_error) {
+      const message = "网络请求失败，请检查连接后重试";
+      showResult(message, "error");
+      speak(message);
+    } finally {
+      submitting = false;
+      if (unknownForm.hidden) focusScanner(); else unknownGameName.focus();
+    }
+  });
+
+  document.querySelector("#unknown-cancel").addEventListener("click", closeUnknownForm);
 
   const finishBufferedScan = () => {
     const barcode = keyBuffer || scannerInput.value;
@@ -113,7 +182,7 @@
   });
 
   document.addEventListener("keydown", (event) => {
-    if (!mode || !manualForm.hidden || submitting) return;
+    if (!mode || !manualForm.hidden || !unknownForm.hidden || submitting) return;
     if (event.key === "Enter" || event.key === "Tab") {
       event.preventDefault();
       finishBufferedScan();

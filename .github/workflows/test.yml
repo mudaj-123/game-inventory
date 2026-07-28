@@ -1,0 +1,47 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.3
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: game_inventory_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d game_inventory_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/game_inventory_test
+      TEST_POSTGRES_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/game_inventory_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.3"
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --all-extras --locked
+      - run: uv run alembic upgrade head
+      - run: uv run pytest -q -m 'not postgres'
+      - run: uv run pytest -q -m postgres
+      - run: uv run ruff check .
+      - run: uv run python -m compileall -q app alembic tests
+      - run: node --check app/static/app.js
+      - run: node --check app/static/service-worker.js
+      - run: git diff --check

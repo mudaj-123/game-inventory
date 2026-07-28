@@ -1,7 +1,7 @@
 :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #14202b; background: #eef3f7; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { min-height: 48px; cursor: pointer; }
 .app-shell { width: min(100%, 42rem); min-height: 100dvh; margin: auto; padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom)); background: #fff; }
 .status-bar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; border-bottom: 1px solid #d8e0e7; }
@@ -32,6 +32,14 @@ h2 { text-align: center; font-size: clamp(1.7rem, 8vw, 2.5rem); }
 .manual-row { display: flex; gap: .5rem; margin-top: .5rem; }
 .manual-row input { min-width: 0; width: 100%; padding: .75rem; border: 1px solid #7c8b96; border-radius: .5rem; }
 .manual-row button, .update-notice button { border: 0; border-radius: .5rem; color: white; background: #17324d; }
+.unknown-form { display: grid; gap: .45rem; margin-top: .75rem; padding: 1rem; text-align: left; background: #f3f6f8; border-radius: .75rem; }
+.unknown-form[hidden] { display: none; }
+.unknown-form h3 { margin: 0 0 .35rem; text-align: center; }
+.unknown-form input, .unknown-form select { width: 100%; padding: .7rem; border: 1px solid #7c8b96; border-radius: .5rem; background: white; }
+.unknown-form input[readonly] { color: #52616d; background: #e4e9ed; }
+.unknown-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .5rem; }
+.unknown-actions button { border: 0; border-radius: .5rem; color: white; background: #096b45; }
+.unknown-actions .secondary-button { margin: 0; border: 2px solid #17324d; color: #17324d; background: white; }
 .update-notice { position: fixed; right: 1rem; bottom: 1rem; left: 1rem; max-width: 40rem; margin: auto; padding: 1rem; color: white; background: #14202b; border-radius: .75rem; box-shadow: 0 4px 16px #0006; }
 .update-notice button { margin-left: .5rem; border: 1px solid white; }
 @media (max-width: 350px) { .app-shell { padding-inline: .65rem; } .status-bar { align-items: flex-start; } .network { font-size: .85rem; } }
