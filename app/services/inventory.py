@@ -1,12 +1,30 @@
 """原子、幂等的库存扫码业务。"""
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import CatalogEntry, InventoryTransaction, Product
 from app.schemas import ResolveUnknownRequest, ScanRequest, ScanResponse
 from app.services.catalog import normalize_name
+
+MAX_TRANSACTION_ATTEMPTS = 3
+
+
+class InventoryConflictError(RuntimeError):
+    """A retryable inventory uniqueness race could not be resolved."""
+
+
+def _is_unique_violation(error: IntegrityError) -> bool:
+    """Return whether an IntegrityError is specifically a unique violation."""
+
+    original = error.orig
+    sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+    if sqlstate == "23505":
+        return True
+    # SQLite is used by local/unit tests and does not expose SQLSTATE.
+    return "UNIQUE constraint failed" in str(original)
 
 
 def _response_from_transaction(transaction: InventoryTransaction, replay: bool) -> ScanResponse:
@@ -76,9 +94,7 @@ async def _change_quantity(
     return _response_from_transaction(transaction, False)
 
 
-async def process_scan(session: AsyncSession, scan: ScanRequest) -> ScanResponse:
-    """处理已知、目录匹配和未知条码，成功变化与流水同事务提交。"""
-
+async def _process_scan_once(session: AsyncSession, scan: ScanRequest) -> ScanResponse:
     scan_id = str(scan.client_scan_id)
     async with session.begin():
         previous = await _existing_transaction(session, scan_id)
@@ -117,11 +133,28 @@ async def process_scan(session: AsyncSession, scan: ScanRequest) -> ScanResponse
         return await _change_quantity(session, product, scan.operation, scan)
 
 
-async def resolve_unknown(
+async def process_scan(session: AsyncSession, scan: ScanRequest) -> ScanResponse:
+    """处理扫码，并对商品或幂等键的唯一约束竞争作有限重试。"""
+
+    for attempt in range(MAX_TRANSACTION_ATTEMPTS):
+        try:
+            return await _process_scan_once(session, scan)
+        except IntegrityError as error:
+            # begin() normally rolls back, but make the boundary explicit before
+            # any retry/query so no failed transaction state can leak forward.
+            await session.rollback()
+            if not _is_unique_violation(error):
+                raise
+            if attempt == MAX_TRANSACTION_ATTEMPTS - 1:
+                raise InventoryConflictError(
+                    "库存请求发生并发冲突，请重新扫描。"
+                ) from error
+    raise AssertionError("unreachable")
+
+
+async def _resolve_unknown_once(
     session: AsyncSession, request: ResolveUnknownRequest
 ) -> ScanResponse:
-    """人工建品和首次入库在同一数据库事务内完成。"""
-
     scan_id = str(request.client_scan_id)
     async with session.begin():
         previous = await _existing_transaction(session, scan_id)
@@ -152,3 +185,22 @@ async def resolve_unknown(
             device_id=request.device_id,
         )
         return await _change_quantity(session, product, "IN", scan)
+
+
+async def resolve_unknown(
+    session: AsyncSession, request: ResolveUnknownRequest
+) -> ScanResponse:
+    """人工建品和首次入库在同一事务内完成，并处理唯一约束竞争。"""
+
+    for attempt in range(MAX_TRANSACTION_ATTEMPTS):
+        try:
+            return await _resolve_unknown_once(session, request)
+        except IntegrityError as error:
+            await session.rollback()
+            if not _is_unique_violation(error):
+                raise
+            if attempt == MAX_TRANSACTION_ATTEMPTS - 1:
+                raise InventoryConflictError(
+                    "未知条码补录发生并发冲突，请重新扫描。"
+                ) from error
+    raise AssertionError("unreachable")

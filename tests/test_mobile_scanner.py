@@ -40,3 +40,16 @@ def test_scanner_supports_hid_terminators_and_string_barcode_validation() -> Non
     assert "parseInt" not in source
     assert 'fetch("/api/scans"' in source
     assert "/api/inventory/scans" not in source
+
+
+def test_scanner_handles_business_status_and_unknown_resolution() -> None:
+    source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    page = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+
+    assert 'payload.status === "SUCCESS"' in source
+    assert 'payload.status === "UNKNOWN_BARCODE_REQUIRES_INPUT"' in source
+    assert 'fetch("/api/scans/resolve-unknown"' in source
+    assert "response.ok ?" not in source
+    assert 'id="unknown-barcode" name="barcode" readonly' in page
+    for platform in ("PS5", "PS4", "SWITCH", "SWITCH2"):
+        assert f'value="{platform}"' in page

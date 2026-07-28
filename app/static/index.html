@@ -45,6 +45,29 @@
             <button type="submit">提交</button>
           </div>
         </form>
+        <form id="unknown-form" class="unknown-form" hidden>
+          <h3>补录未知条码</h3>
+          <label for="unknown-barcode">条码</label>
+          <input id="unknown-barcode" name="barcode" readonly>
+          <label for="unknown-game-name">游戏名（必填）</label>
+          <input id="unknown-game-name" name="game_name" required maxlength="255">
+          <label for="unknown-platform">平台（必填）</label>
+          <select id="unknown-platform" name="platform" required>
+            <option value="">请选择平台</option>
+            <option value="PS5">PS5</option>
+            <option value="PS4">PS4</option>
+            <option value="SWITCH">SWITCH</option>
+            <option value="SWITCH2">SWITCH2</option>
+          </select>
+          <label for="unknown-region">区域（可选）</label>
+          <input id="unknown-region" name="region" maxlength="16">
+          <label for="unknown-edition">版本（可选）</label>
+          <input id="unknown-edition" name="edition" maxlength="100">
+          <div class="unknown-actions">
+            <button type="submit">确认并入库</button>
+            <button id="unknown-cancel" class="secondary-button" type="button">取消</button>
+          </div>
+        </form>
         <button id="restore-focus" class="secondary-button" type="button">恢复扫码焦点</button>
         <button id="exit-scan" class="text-button" type="button">退出扫码</button>
       </section>
