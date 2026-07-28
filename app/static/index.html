@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#17324d">
+    <meta name="description" content="实体游戏库存连续扫码工具">
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <link rel="stylesheet" href="/static/styles.css">
+    <title>游戏库存扫码</title>
+  </head>
+  <body>
+    <main class="app-shell" data-mode="home">
+      <header class="status-bar">
+        <h1>游戏库存扫码</h1>
+        <span id="network-status" class="network" role="status">正在检测网络…</span>
+      </header>
+
+      <section id="home-panel" aria-labelledby="home-title">
+        <h2 id="home-title">请选择操作</h2>
+        <div class="mode-buttons">
+          <button class="mode-button inbound" data-mode-button="IN" type="button">
+            <span aria-hidden="true">📦</span> 连续入库
+          </button>
+          <button class="mode-button outbound" data-mode-button="OUT" type="button">
+            <span aria-hidden="true">💰</span> 连续出库
+          </button>
+        </div>
+      </section>
+
+      <section id="scan-panel" class="scan-panel" hidden aria-labelledby="mode-title">
+        <p class="eyebrow">当前操作</p>
+        <h2 id="mode-title">连续入库</h2>
+        <div id="ready-state" class="ready-state">扫码枪已就绪</div>
+        <label class="scanner-input-label" for="scanner-input">扫码枪输入</label>
+        <input id="scanner-input" class="scanner-input" type="text" inputmode="none"
+               autocomplete="off" autocapitalize="off" spellcheck="false">
+        <p id="result" class="result" aria-live="assertive">请扫描 8～14 位商品条码</p>
+        <button id="manual-toggle" class="secondary-button" type="button">手动输入条码</button>
+        <form id="manual-form" class="manual-form" hidden>
+          <label for="manual-barcode">条码（8～14 位数字）</label>
+          <div class="manual-row">
+            <input id="manual-barcode" name="barcode" inputmode="numeric" pattern="[0-9]{8,14}"
+                   autocomplete="off" required>
+            <button type="submit">提交</button>
+          </div>
+        </form>
+        <button id="restore-focus" class="secondary-button" type="button">恢复扫码焦点</button>
+        <button id="exit-scan" class="text-button" type="button">退出扫码</button>
+      </section>
+
+      <aside id="update-notice" class="update-notice" hidden role="status">
+        新版本已就绪。<button id="apply-update" type="button">立即更新</button>
+      </aside>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

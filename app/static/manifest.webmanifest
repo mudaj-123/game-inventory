@@ -1,0 +1,12 @@
+{
+  "name": "实体游戏库存扫码",
+  "short_name": "库存扫码",
+  "description": "手机端实体游戏连续入库和出库工具",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#17324d",
+  "icons": []
+}
