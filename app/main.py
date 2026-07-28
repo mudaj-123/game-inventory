@@ -2,8 +2,11 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import engine
@@ -22,6 +25,27 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+async def scanner_page() -> FileResponse:
+    """提供手机端连续扫码应用外壳。"""
+
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/service-worker.js", include_in_schema=False)
+async def service_worker() -> FileResponse:
+    """从站点根路径提供 Service Worker，使其可以控制扫码首页。"""
+
+    return FileResponse(
+        STATIC_DIR / "service-worker.js",
+        media_type="text/javascript",
+        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+    )
 
 
 @app.get("/health", tags=["system"])
