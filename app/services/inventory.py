@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models import CatalogEntry, InventoryTransaction, Product
+from app.models import CatalogEntry, InventoryTransaction, Product, User
 from app.schemas import ResolveUnknownRequest, ScanRequest, ScanResponse
 from app.services.catalog import normalize_name
 
@@ -57,7 +57,7 @@ async def _existing_transaction(
 
 
 async def _change_quantity(
-    session: AsyncSession, product: Product, operation: str, scan: ScanRequest
+    session: AsyncSession, product: Product, operation: str, scan: ScanRequest, user: User
 ) -> ScanResponse:
     delta = 1 if operation == "IN" else -1
     statement = update(Product).where(Product.id == product.id)
@@ -88,13 +88,14 @@ async def _change_quantity(
         quantity_before=quantity_after - delta,
         quantity_after=quantity_after,
         device_id=scan.device_id,
+        user_id=user.id,
     )
     session.add(transaction)
     await session.flush()
     return _response_from_transaction(transaction, False)
 
 
-async def _process_scan_once(session: AsyncSession, scan: ScanRequest) -> ScanResponse:
+async def _process_scan_once(session: AsyncSession, scan: ScanRequest, user: User) -> ScanResponse:
     scan_id = str(scan.client_scan_id)
     async with session.begin():
         previous = await _existing_transaction(session, scan_id)
@@ -130,15 +131,15 @@ async def _process_scan_once(session: AsyncSession, scan: ScanRequest) -> ScanRe
             )
             session.add(product)
             await session.flush()
-        return await _change_quantity(session, product, scan.operation, scan)
+        return await _change_quantity(session, product, scan.operation, scan, user)
 
 
-async def process_scan(session: AsyncSession, scan: ScanRequest) -> ScanResponse:
+async def process_scan(session: AsyncSession, scan: ScanRequest, user: User) -> ScanResponse:
     """处理扫码，并对商品或幂等键的唯一约束竞争作有限重试。"""
 
     for attempt in range(MAX_TRANSACTION_ATTEMPTS):
         try:
-            return await _process_scan_once(session, scan)
+            return await _process_scan_once(session, scan, user)
         except IntegrityError as error:
             # begin() normally rolls back, but make the boundary explicit before
             # any retry/query so no failed transaction state can leak forward.
@@ -153,7 +154,7 @@ async def process_scan(session: AsyncSession, scan: ScanRequest) -> ScanResponse
 
 
 async def _resolve_unknown_once(
-    session: AsyncSession, request: ResolveUnknownRequest
+    session: AsyncSession, request: ResolveUnknownRequest, user: User
 ) -> ScanResponse:
     scan_id = str(request.client_scan_id)
     async with session.begin():
@@ -184,17 +185,17 @@ async def _resolve_unknown_once(
             client_scan_id=request.client_scan_id,
             device_id=request.device_id,
         )
-        return await _change_quantity(session, product, "IN", scan)
+        return await _change_quantity(session, product, "IN", scan, user)
 
 
 async def resolve_unknown(
-    session: AsyncSession, request: ResolveUnknownRequest
+    session: AsyncSession, request: ResolveUnknownRequest, user: User
 ) -> ScanResponse:
     """人工建品和首次入库在同一事务内完成，并处理唯一约束竞争。"""
 
     for attempt in range(MAX_TRANSACTION_ATTEMPTS):
         try:
-            return await _resolve_unknown_once(session, request)
+            return await _resolve_unknown_once(session, request, user)
         except IntegrityError as error:
             await session.rollback()
             if not _is_unique_violation(error):

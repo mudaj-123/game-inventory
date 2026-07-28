@@ -2,7 +2,7 @@
 
 面向实体游戏店的移动端库存管理系统。目标运行环境为 Python 3.12、FastAPI、SQLAlchemy 2.x 与 Alembic；正式环境使用 PostgreSQL，本地开发和测试可使用 SQLite。条码始终按字符串处理并保留前导零，商品识别优先使用服务器本地目录，不依赖第三方在线条码识别服务。
 
-> 当前仓库仅完成**项目初始化与 P0 基础结构**：配置、异步数据库基础设施、FastAPI 健康检查、Alembic 环境及本地目录模板。库存模型、目录导入、认证、扫码事务、前端和部署配置将在后续阶段实现。
+当前版本包含 Cookie 认证、角色权限、归属到操作员的扫码流水、今日流水以及只追加的安全撤销。
 
 ## 环境要求
 
@@ -79,7 +79,19 @@ uvicorn app.main:app --reload
 可查看脚本参数。
 Windows 用户可按原步骤手工创建虚拟环境并执行 `python -m pip install -e '.[dev]'`。
 
-浏览器访问 `http://127.0.0.1:8000/health`，预期返回应用状态。当前尚无业务迁移，所以 `alembic upgrade head` 只用于验证迁移环境；下一阶段创建模型后才会生成首个版本。
+浏览器访问 `http://127.0.0.1:8000/health`，预期返回应用状态。启动前必须执行 `alembic upgrade head` 应用库存核心及认证流水迁移。
+
+### 创建首个管理员
+
+先执行 `alembic upgrade head`，再用交互方式创建管理员（密码由 `getpass` 读取，不回显）：
+
+```bash
+uv run python -m app.cli create-admin
+```
+
+自动化部署也可明确传入 `--username` 和 `--password`；命令行参数可能进入 shell 历史，优先使用交互输入。源码没有默认密码，重复用户名会返回清晰错误。生产环境必须设置强随机 `SECRET_KEY`，此时会话 Cookie 自动启用 `Secure`；所有环境均使用 `HttpOnly` 和 `SameSite=Lax`。登录响应中的 CSRF token 只保存在页面内存中，前端不会把密码、会话或数据库凭据写入 `localStorage`。
+
+`STAFF` 可扫码、查看自己的当日流水，并在 `UNDO_WINDOW_MINUTES` 内撤销自己最近一条可撤销流水；`ADMIN` 可查看全部当日流水并指定流水撤销。撤销永不更新或删除原流水，而是追加关联的 `REVERSAL`。
 
 ### VS Code
 
@@ -113,4 +125,4 @@ python3.12 -m ruff check .
 
 ## 当前限制与后续阶段
 
-尚未实现：数据库业务模型及首个迁移、目录导入导出、库存事务与并发控制、身份认证、扫码 API、移动端/PWA、预警报表、管理员命令、Docker/PostgreSQL 部署。上述内容应按需求规格分阶段完成；不能以 `Base.metadata.create_all()` 代替正式 Alembic 升级，也不能接入第三方在线条码识别作为核心依赖。
+尚未实现目录导出、预警报表和完整用户管理界面。数据库升级必须继续使用 Alembic，不能以 `Base.metadata.create_all()` 代替，也不能接入第三方在线条码识别作为核心依赖。

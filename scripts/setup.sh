@@ -53,7 +53,6 @@ if command -v uv >/dev/null 2>&1; then
     UV_PROJECT_ENVIRONMENT="${VENV_DIR}" uv sync \
         --project "${REPOSITORY_ROOT}" \
         --all-extras \
-        --locked \
         --python "${PYTHON_BIN}"
 else
     "${PYTHON_BIN}" -m venv "${VENV_DIR}"

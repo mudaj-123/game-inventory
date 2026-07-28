@@ -10,9 +10,10 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.auth.security import hash_password
 from app.database import Base, get_db_session
 from app.main import app
-from app.models import CatalogEntry, InventoryTransaction, Product
+from app.models import CatalogEntry, InventoryTransaction, Product, User
 from app.services.catalog import import_catalog
 
 
@@ -27,13 +28,22 @@ async def session_factory(tmp_path: Path) -> AsyncIterator[async_sessionmaker[As
 
 
 @pytest.fixture
-def client(session_factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[TestClient]:
+async def client(session_factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[TestClient]:
+    async with session_factory() as session, session.begin():
+        session.add(
+            User(username="tester", password_hash=hash_password("test-password"), role="STAFF")
+        )
+
     async def override_session() -> AsyncIterator[AsyncSession]:
         async with session_factory() as session:
             yield session
 
     app.dependency_overrides[get_db_session] = override_session
     with TestClient(app) as test_client:
+        login = test_client.post(
+            "/api/auth/login", json={"username": "tester", "password": "test-password"}
+        )
+        test_client.headers["X-CSRF-Token"] = login.json()["csrf_token"]
         yield test_client
     app.dependency_overrides.clear()
 

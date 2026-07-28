@@ -2,11 +2,37 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
+
+
+class User(Base):
+    """可登录的店员或管理员。"""
+
+    __tablename__ = "users"
+    __table_args__ = (CheckConstraint("role IN ('ADMIN', 'STAFF')", name="ck_users_role"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(16), default="STAFF")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class CatalogEntry(Base):
@@ -75,7 +101,10 @@ class InventoryTransaction(Base):
     """库存变化流水；应用只追加，不更新或删除。"""
 
     __tablename__ = "inventory_transactions"
-    __table_args__ = (CheckConstraint("quantity_after >= 0", name="ck_tx_quantity_nonnegative"),)
+    __table_args__ = (
+        CheckConstraint("quantity_after >= 0", name="ck_tx_quantity_nonnegative"),
+        UniqueConstraint("related_transaction_id", name="uq_tx_related_transaction_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     client_scan_id: Mapped[str] = mapped_column(String(36), unique=True, index=True)
@@ -90,7 +119,8 @@ class InventoryTransaction(Base):
     related_transaction_id: Mapped[int | None] = mapped_column(
         ForeignKey("inventory_transactions.id")
     )
-    user_id: Mapped[int | None] = mapped_column(Integer)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    user: Mapped[User | None] = relationship()
     device_id: Mapped[str | None] = mapped_column(String(255))
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

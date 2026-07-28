@@ -36,7 +36,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv sync --all-extras --locked
+      - run: uv sync --all-extras
       - run: uv run alembic upgrade head
       - run: uv run pytest -q -m 'not postgres'
       - run: uv run pytest -q -m postgres
