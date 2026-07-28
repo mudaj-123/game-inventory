@@ -38,3 +38,5 @@ def test_scanner_supports_hid_terminators_and_string_barcode_validation() -> Non
     assert 'event.key === "Enter" || event.key === "Tab"' in source
     assert "/^[0-9]{8,14}$/" in source
     assert "parseInt" not in source
+    assert 'fetch("/api/scans"' in source
+    assert "/api/inventory/scans" not in source

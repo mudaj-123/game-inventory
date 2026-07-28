@@ -69,7 +69,7 @@
     readyState.textContent = "正在提交…";
     showResult(`正在处理条码 ${barcode}…`);
     try {
-      const response = await fetch("/api/inventory/scans", {
+      const response = await fetch("/api/scans", {
         method: "POST",
         cache: "no-store",
         credentials: "same-origin",
