@@ -132,7 +132,7 @@ python3.12 -m ruff check .
 
 ## 腾讯云 Linux 生产部署
 
-该方案只管理本仓库的 `app` 与 `db`，不会管理、停止或修改服务器上的 OpenClaw。应用仅在宿主机回环地址 `127.0.0.1:18080` 监听，PostgreSQL **没有宿主机端口映射**，并位于 Compose 内部网络。公网访问必须使用独立域名和 HTTPS；生产模式的会话 Cookie 会启用 `Secure`，直接使用 HTTP 将无法正常、安全地登录。
+该方案只管理本仓库的 `app` 与 `db`，不会管理、停止或修改服务器上的 OpenClaw。应用仅在宿主机回环地址 `127.0.0.1` 监听，宿主机端口由 `.env.production` 中的 `APP_HOST_PORT` 控制，默认示例为 `18080`；这只是可配置的默认值，并非固定要求。若该端口已被占用，可设置 `APP_HOST_PORT=18081`。PostgreSQL **没有宿主机端口映射**，并位于 Compose 内部网络。公网访问必须使用独立域名和 HTTPS；生产模式的会话 Cookie 会启用 `Secure`，直接使用 HTTP 将无法正常、安全地登录。
 
 ### 1. 准备与首次启动
 
@@ -150,7 +150,7 @@ python3.12 -c 'import secrets; print(secrets.token_urlsafe(64))'
 chmod 600 .env.production
 ```
 
-编辑 `.env.production`，为 `POSTGRES_PASSWORD` 和 `SECRET_KEY` 设置互不复用的强随机值，并让 `DATABASE_URL` 的用户名、密码、数据库名与三个 `POSTGRES_*` 变量完全一致。主机必须使用 Docker 内部服务名 `db`，例如 `postgresql+asyncpg://inventory:URL编码后的密码@db:5432/inventory`。若密码含 `@`、`:`、`/` 等字符，须先进行 URL 编码。
+编辑 `.env.production`，为 `POSTGRES_PASSWORD` 和 `SECRET_KEY` 设置互不复用的强随机值，并让 `DATABASE_URL` 的用户名、密码、数据库名与三个 `POSTGRES_*` 变量完全一致。主机必须使用 Docker 内部服务名 `db`，例如 `postgresql+asyncpg://inventory:URL编码后的密码@db:5432/inventory`。若密码含 `@`、`:`、`/` 等字符，须先进行 URL 编码。`APP_HOST_PORT` 控制应用在宿主机回环地址上的监听端口；保留 `18080` 即使用默认示例，端口冲突时可改为 `18081`。
 
 ```bash
 # 构建并启动；app 会等待 db 健康，入口脚本随后自动执行 alembic upgrade head
@@ -165,13 +165,15 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec app al
 docker compose --env-file .env.production -f docker-compose.prod.yml exec app python -m app.cli create-admin
 ```
 
+以上及下文的 `curl` 命令以默认 `APP_HOST_PORT=18080` 为例；若修改了该变量，健康检查 URL、反向代理 `proxy_pass` 和其他部署命令中的宿主机端口都必须使用与 `APP_HOST_PORT` 一致的值（例如 `18081`）。
+
 首次启动前确保非 root 容器用户能写导出目录：`sudo chown -R 10001:10001 data/exports`。目录 CSV 与封面只需对 UID 10001 可读；如需让应用写入它们，再按相同方式授权，避免使用全员可写权限。
 
 镜像默认启动命令是 `uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*`；容器入口会先迁移，再以 `exec` 启动 Uvicorn，使其直接接收 SIGTERM 并优雅停止。镜像及 Compose 均配置 `/health` 健康检查。
 
 ### 2. 独立反向代理、HTTPS 与手机 PWA
 
-把 `deploy/nginx-inventory.conf.example` 作为**新的独立 server block** 合并进现有 Nginx 配置，将 `inventory.example.com` 换成库存域名，并沿用服务器已有的证书签发流程。不要覆盖 OpenClaw 的域名、virtual host 或配置文件。示例把 HTTP 强制跳转至 HTTPS，转发到 `127.0.0.1:18080`，并传递代理头与 WebSocket 升级头。执行 `nginx -t` 后再 reload；它不让 Compose 接管宿主机 80/443。
+把 `deploy/nginx-inventory.conf.example` 作为**新的独立 server block** 合并进现有 Nginx 配置，将 `inventory.example.com` 换成库存域名，并沿用服务器已有的证书签发流程。不要覆盖 OpenClaw 的域名、virtual host 或配置文件。示例把 HTTP 强制跳转至 HTTPS，并以默认 `APP_HOST_PORT=18080` 转发到 `127.0.0.1:18080`；实际 `proxy_pass` 端口必须与 `.env.production` 中的 `APP_HOST_PORT` 一致。配置还会传递代理头与 WebSocket 升级头。执行 `nginx -t` 后再 reload；它不让 Compose 接管宿主机 80/443。
 
 通过手机浏览器打开 `https://inventory.example.com` 并登录。Android Chrome 可从菜单选择“添加到主屏幕/安装应用”；iOS Safari 可从分享菜单选择“添加到主屏幕”。摄像头及 PWA 能力应始终通过 HTTPS 使用。
 
