@@ -19,7 +19,8 @@ def test_production_compose_security_and_operations() -> None:
     db_section, app_section = compose.split("  app:\n", 1)
 
     assert "ports:" not in db_section
-    assert '"127.0.0.1:18080:8000"' in app_section
+    assert '"127.0.0.1:${APP_HOST_PORT:-18080}:8000"' in app_section
+    assert '"0.0.0.0:${APP_HOST_PORT' not in app_section
     assert "healthcheck:" in db_section
     assert "healthcheck:" in app_section
     assert "inventory_postgres_data:/var/lib/postgresql/data" in db_section
@@ -44,6 +45,7 @@ def test_production_environment_template_has_no_secrets() -> None:
 
     assert values["SECRET_KEY"] == ""
     assert values["POSTGRES_PASSWORD"] == ""
+    assert values["APP_HOST_PORT"] == "18080"
     assert "@db:5432/" in values["DATABASE_URL"]
 
 
