@@ -129,6 +129,9 @@
       if (payload.status === "SUCCESS") {
         showResult(message, "success");
         speak(message);
+      } else if (payload.status === "OUT_OF_STOCK") {
+        showResult(message, "error");
+        speak(message);
       } else if (payload.status === "UNKNOWN_BARCODE_REQUIRES_INPUT") {
         showResult(message, "error");
         unknownScanId = clientScanId;

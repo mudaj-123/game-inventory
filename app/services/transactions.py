@@ -8,6 +8,7 @@ from sqlalchemy import exists, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import CurrentUser
 from app.config import settings
 from app.models import InventoryTransaction, Product, User
 from app.schemas.transactions import ReverseResponse, TransactionItem, TransactionPage
@@ -23,7 +24,7 @@ def _today_bounds() -> tuple[datetime, datetime]:
     return start.astimezone(UTC), (start + timedelta(days=1)).astimezone(UTC)
 
 
-async def list_transactions(session: AsyncSession, user: User, page: int, page_size: int,
+async def list_transactions(session: AsyncSession, user: CurrentUser, page: int, page_size: int,
                             operation_type: str | None) -> TransactionPage:
     start, end = _today_bounds()
     filters = [InventoryTransaction.created_at >= start, InventoryTransaction.created_at < end]
@@ -57,7 +58,7 @@ async def list_transactions(session: AsyncSession, user: User, page: int, page_s
     return TransactionPage(items=items, page=page, page_size=page_size, total=total)
 
 
-async def _latest_reversible_id(session: AsyncSession, user: User) -> int | None:
+async def _latest_reversible_id(session: AsyncSession, user: CurrentUser) -> int | None:
     reversal = InventoryTransaction.__table__.alias("reversal")
     return await session.scalar(select(InventoryTransaction.id).where(
         InventoryTransaction.user_id == user.id,
@@ -71,7 +72,7 @@ async def _latest_reversible_id(session: AsyncSession, user: User) -> int | None
 
 
 async def reverse_transaction(
-    session: AsyncSession, user: User, transaction_id: int | None
+    session: AsyncSession, user: CurrentUser, transaction_id: int | None
 ) -> ReverseResponse:
     try:
         async with session.begin():

@@ -6,6 +6,7 @@ import hmac
 import json
 import secrets
 import time
+from dataclasses import dataclass
 from typing import Annotated
 
 import bcrypt
@@ -18,6 +19,16 @@ from app.database import get_db_session
 from app.models import User
 
 SESSION_COOKIE = settings.session_cookie_name
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentUser:
+    """认证边界外使用的不可变身份快照，不依赖 ORM 会话生命周期。"""
+
+    id: int
+    username: str
+    role: str
+    active: bool
 
 
 def hash_password(password: str) -> str:
@@ -68,23 +79,34 @@ def decode_session_token(token: str) -> dict[str, int | str] | None:
 async def get_current_user(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-) -> User:
+) -> CurrentUser:
     payload = decode_session_token(token or "")
     user = await session.scalar(select(User).where(User.id == payload["uid"])) if payload else None
+    if user is None or not user.active:
+        await session.rollback()
+        raise HTTPException(status_code=401, detail="请先登录")
+    current_user = CurrentUser(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        active=user.active,
+    )
     # Close SQLAlchemy's implicit read transaction before the service opens its atomic write unit.
     await session.rollback()
-    if user is None or not user.active:
-        raise HTTPException(status_code=401, detail="请先登录")
-    return user
+    return current_user
 
 
-async def require_staff(user: Annotated[User, Depends(get_current_user)]) -> User:
+async def require_staff(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+) -> CurrentUser:
     if user.role not in {"STAFF", "ADMIN"}:
         raise HTTPException(status_code=403, detail="权限不足")
     return user
 
 
-async def require_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
+async def require_admin(
+    user: Annotated[CurrentUser, Depends(get_current_user)],
+) -> CurrentUser:
     if user.role != "ADMIN":
         raise HTTPException(status_code=403, detail="仅管理员可执行此操作")
     return user

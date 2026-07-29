@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.security import (
     SESSION_COOKIE,
+    CurrentUser,
     create_session_token,
     decode_session_token,
     get_current_user,
@@ -42,7 +43,7 @@ async def logout(response: Response, _: Annotated[None, Depends(verify_csrf)]) -
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(user: Annotated[User, Depends(get_current_user)],
+async def me(user: Annotated[CurrentUser, Depends(get_current_user)],
              token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None) -> UserResponse:
     payload = decode_session_token(token or "") or {}
     return UserResponse(id=user.id, username=user.username, role=user.role,

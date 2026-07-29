@@ -10,10 +10,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.auth.security import hash_password
+from app.auth.security import create_session_token, get_current_user, hash_password
 from app.database import Base, get_db_session
 from app.main import app
 from app.models import InventoryTransaction, Product, User
+from app.schemas import ScanRequest
+from app.services.inventory import process_scan
 
 
 @pytest.fixture
@@ -77,6 +79,36 @@ async def test_password_hash_and_login_rules(raw_client: TestClient,
     response = raw_client.post("/api/auth/login", json={"username": "staff", "password": "correct"})
     assert response.status_code == 200
     assert "HttpOnly" in response.headers["set-cookie"] and "SameSite=lax" in response.headers["set-cookie"]  # noqa: E501
+
+
+async def test_current_user_snapshot_survives_rollback_and_allows_write_transaction(
+    factory: async_sessionmaker[AsyncSession],
+) -> None:
+    await seed_product(factory)
+    async with factory() as lookup_session:
+        staff_id = await lookup_session.scalar(select(User.id).where(User.username == "staff"))
+    assert staff_id is not None
+    token, _ = create_session_token(staff_id)
+
+    async with factory() as session:
+        current_user = await get_current_user(session, token)
+        assert not session.in_transaction()
+        assert (current_user.id, current_user.username, current_user.role, current_user.active) == (
+            staff_id,
+            "staff",
+            "STAFF",
+            True,
+        )
+        result = await process_scan(
+            session,
+            ScanRequest(
+                barcode="00001111",
+                operation="IN",
+                client_scan_id=uuid.uuid4(),
+            ),
+            current_user,
+        )
+        assert result.quantity_after == 1
 
 
 async def test_scan_requires_auth_csrf_and_records_user(raw_client: TestClient,

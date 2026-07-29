@@ -4,8 +4,9 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import CurrentUser
 from app.config import settings
-from app.models import CatalogEntry, InventoryTransaction, Product, User
+from app.models import CatalogEntry, InventoryTransaction, Product
 from app.schemas import ResolveUnknownRequest, ScanRequest, ScanResponse
 from app.services.catalog import normalize_name
 
@@ -57,7 +58,7 @@ async def _existing_transaction(
 
 
 async def _change_quantity(
-    session: AsyncSession, product: Product, operation: str, scan: ScanRequest, user: User
+    session: AsyncSession, product: Product, operation: str, scan: ScanRequest, user: CurrentUser
 ) -> ScanResponse:
     delta = 1 if operation == "IN" else -1
     statement = update(Product).where(Product.id == product.id)
@@ -95,7 +96,9 @@ async def _change_quantity(
     return _response_from_transaction(transaction, False)
 
 
-async def _process_scan_once(session: AsyncSession, scan: ScanRequest, user: User) -> ScanResponse:
+async def _process_scan_once(
+    session: AsyncSession, scan: ScanRequest, user: CurrentUser
+) -> ScanResponse:
     scan_id = str(scan.client_scan_id)
     async with session.begin():
         previous = await _existing_transaction(session, scan_id)
@@ -134,7 +137,9 @@ async def _process_scan_once(session: AsyncSession, scan: ScanRequest, user: Use
         return await _change_quantity(session, product, scan.operation, scan, user)
 
 
-async def process_scan(session: AsyncSession, scan: ScanRequest, user: User) -> ScanResponse:
+async def process_scan(
+    session: AsyncSession, scan: ScanRequest, user: CurrentUser
+) -> ScanResponse:
     """处理扫码，并对商品或幂等键的唯一约束竞争作有限重试。"""
 
     for attempt in range(MAX_TRANSACTION_ATTEMPTS):
@@ -154,7 +159,7 @@ async def process_scan(session: AsyncSession, scan: ScanRequest, user: User) -> 
 
 
 async def _resolve_unknown_once(
-    session: AsyncSession, request: ResolveUnknownRequest, user: User
+    session: AsyncSession, request: ResolveUnknownRequest, user: CurrentUser
 ) -> ScanResponse:
     scan_id = str(request.client_scan_id)
     async with session.begin():
@@ -189,7 +194,7 @@ async def _resolve_unknown_once(
 
 
 async def resolve_unknown(
-    session: AsyncSession, request: ResolveUnknownRequest, user: User
+    session: AsyncSession, request: ResolveUnknownRequest, user: CurrentUser
 ) -> ScanResponse:
     """人工建品和首次入库在同一事务内完成，并处理唯一约束竞争。"""
 

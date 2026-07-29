@@ -49,7 +49,10 @@ def test_scanner_handles_business_status_and_unknown_resolution() -> None:
     assert 'payload.status === "SUCCESS"' in source
     assert 'payload.status === "UNKNOWN_BARCODE_REQUIRES_INPUT"' in source
     assert 'apiFetch("/api/scans/resolve-unknown"' in source
-    assert "response.ok ?" not in source
+    scan_block = source[source.index("const submitBarcode"):source.index("const closeUnknownForm")]
+    assert 'payload.status === "SUCCESS"' in scan_block
+    assert 'payload.status === "UNKNOWN_BARCODE_REQUIRES_INPUT"' in scan_block
+    assert 'payload.status === "OUT_OF_STOCK"' in source
     assert 'id="unknown-barcode" name="barcode" readonly' in page
     for platform in ("PS5", "PS4", "SWITCH", "SWITCH2"):
         assert f'value="{platform}"' in page

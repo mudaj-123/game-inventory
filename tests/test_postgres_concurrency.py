@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.auth.security import hash_password
+from app.auth.security import CurrentUser, hash_password
 from app.models import CatalogEntry, InventoryTransaction, Product, User
 from app.schemas import ScanRequest
 from app.services.inventory import process_scan
@@ -54,8 +54,11 @@ async def run_scan(
     async with factory() as session:
         user = await session.scalar(select(User).where(User.username == "postgres-staff"))
         assert user is not None
+        current_user = CurrentUser(
+            id=user.id, username=user.username, role=user.role, active=user.active
+        )
         await session.rollback()
-        return await process_scan(session, scan, user)
+        return await process_scan(session, scan, current_user)
 
 
 async def add_catalog(factory: async_sessionmaker[AsyncSession], barcode: str) -> None:
@@ -162,9 +165,12 @@ async def test_concurrent_duplicate_reversal_succeeds_once(
         async with postgres_factory() as session:
             user = await session.scalar(select(User).where(User.username == "postgres-staff"))
             assert user is not None
+            current_user = CurrentUser(
+                id=user.id, username=user.username, role=user.role, active=user.active
+            )
             await session.rollback()
             try:
-                return await reverse_transaction(session, user, original.transaction_id)
+                return await reverse_transaction(session, current_user, original.transaction_id)
             except TransactionError as error:
                 return error
 

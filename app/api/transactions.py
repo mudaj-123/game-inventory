@@ -4,15 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_staff, verify_csrf
+from app.auth import CurrentUser, require_staff, verify_csrf
 from app.database import get_db_session
-from app.models import User
 from app.schemas.transactions import ReverseResponse, TransactionPage
 from app.services.transactions import TransactionError, list_transactions, reverse_transaction
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 Db = Annotated[AsyncSession, Depends(get_db_session)]
-Staff = Annotated[User, Depends(require_staff)]
+Staff = Annotated[CurrentUser, Depends(require_staff)]
 
 
 @router.get("", response_model=TransactionPage)
@@ -24,7 +23,7 @@ async def today(session: Db, user: Staff, page: Annotated[int, Query(ge=1)] = 1,
 
 
 async def _reverse(
-    session: AsyncSession, user: User, transaction_id: int | None
+    session: AsyncSession, user: CurrentUser, transaction_id: int | None
 ) -> ReverseResponse:
     try:
         return await reverse_transaction(session, user, transaction_id)

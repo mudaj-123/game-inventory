@@ -5,9 +5,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import require_staff, verify_csrf
+from app.auth import CurrentUser, require_staff, verify_csrf
 from app.database import get_db_session
-from app.models import User
 from app.schemas import ResolveUnknownRequest, ScanRequest, ScanResponse
 from app.services.inventory import InventoryConflictError, process_scan, resolve_unknown
 
@@ -18,7 +17,8 @@ DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 @router.post("", response_model=ScanResponse)
 async def scan(
     request: ScanRequest, session: DatabaseSession,
-    user: Annotated[User, Depends(require_staff)], _: Annotated[None, Depends(verify_csrf)],
+    user: Annotated[CurrentUser, Depends(require_staff)],
+    _: Annotated[None, Depends(verify_csrf)],
 ) -> ScanResponse:
     try:
         return await process_scan(session, request, user)
@@ -29,7 +29,8 @@ async def scan(
 @router.post("/resolve-unknown", response_model=ScanResponse)
 async def resolve(
     request: ResolveUnknownRequest, session: DatabaseSession,
-    user: Annotated[User, Depends(require_staff)], _: Annotated[None, Depends(verify_csrf)],
+    user: Annotated[CurrentUser, Depends(require_staff)],
+    _: Annotated[None, Depends(verify_csrf)],
 ) -> ScanResponse:
     try:
         return await resolve_unknown(session, request, user)
