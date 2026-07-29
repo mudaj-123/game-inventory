@@ -15,8 +15,20 @@
         <h1>游戏库存扫码</h1>
         <span id="network-status" class="network" role="status">正在检测网络…</span>
       </header>
+      <section id="login-panel">
+        <h2>登录</h2>
+        <form id="login-form" class="unknown-form">
+          <label for="login-username">用户名</label><input id="login-username" autocomplete="username" required>
+          <label for="login-password">密码</label><input id="login-password" type="password" autocomplete="current-password" required>
+          <button type="submit">登录</button>
+          <p id="login-error" class="error-text" role="alert"></p>
+        </form>
+      </section>
 
-      <section id="home-panel" aria-labelledby="home-title">
+      <div id="session-bar" hidden><strong id="current-user"></strong>
+        <button id="logout" class="text-button" type="button">退出登录</button></div>
+
+      <section id="home-panel" hidden aria-labelledby="home-title">
         <h2 id="home-title">请选择操作</h2>
         <div class="mode-buttons">
           <button class="mode-button inbound" data-mode-button="IN" type="button">
@@ -26,6 +38,13 @@
             <span aria-hidden="true">💰</span> 连续出库
           </button>
         </div>
+        <button id="transactions-button" class="secondary-button" type="button">今日流水</button>
+        <button id="undo-button" class="secondary-button" type="button">撤销上一步</button>
+      </section>
+
+      <section id="transactions-panel" hidden><h2>今日流水</h2>
+        <div id="transaction-list" class="transaction-list"></div>
+        <button id="transactions-back" class="secondary-button" type="button">返回</button>
       </section>
 
       <section id="scan-panel" class="scan-panel" hidden aria-labelledby="mode-title">

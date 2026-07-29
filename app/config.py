@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     app_timezone: str = "Asia/Shanghai"
     secret_key: str = ""
+    session_cookie_name: str = "inventory_session"
+    session_max_age_seconds: int = Field(default=43200, ge=300)
     database_url: str = "sqlite+aiosqlite:///./inventory.db"
 
     auto_import_local_catalog: bool = True

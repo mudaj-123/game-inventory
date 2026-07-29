@@ -14,10 +14,54 @@
   const unknownForm = document.querySelector("#unknown-form");
   const unknownBarcode = document.querySelector("#unknown-barcode");
   const unknownGameName = document.querySelector("#unknown-game-name");
+  const loginPanel = document.querySelector("#login-panel");
+  const sessionBar = document.querySelector("#session-bar");
+  const transactionsPanel = document.querySelector("#transactions-panel");
+  let csrfToken = null;
   let mode = null;
   let keyBuffer = "";
   let submitting = false;
   let unknownScanId = null;
+
+  const showLogin = () => {
+    csrfToken = null;
+    loginPanel.hidden = false;
+    homePanel.hidden = true;
+    scanPanel.hidden = true;
+    transactionsPanel.hidden = true;
+    sessionBar.hidden = true;
+    document.querySelector("#login-username").focus();
+  };
+
+  const apiFetch = async (url, options = {}) => {
+    options.credentials = "same-origin";
+    options.cache = "no-store";
+    options.headers = { ...(options.headers || {}), ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}) };
+    const response = await fetch(url, options);
+    if (response.status === 401) showLogin();
+    return response;
+  };
+
+  const showHome = (user) => {
+    loginPanel.hidden = true; sessionBar.hidden = false; homePanel.hidden = false;
+    document.querySelector("#current-user").textContent = `${user.username} · ${user.role}`;
+  };
+
+  document.querySelector("#login-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const response = await apiFetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: document.querySelector("#login-username").value,
+        password: document.querySelector("#login-password").value }) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) { document.querySelector("#login-error").textContent = payload.detail || "登录失败"; return; }
+    csrfToken = payload.csrf_token;
+    document.querySelector("#login-password").value = "";
+    showHome(payload);
+  });
+
+  document.querySelector("#logout").addEventListener("click", async () => {
+    await apiFetch("/api/auth/logout", { method: "POST" }); showLogin();
+  });
 
   const focusScanner = () => {
     if (mode && manualForm.hidden && unknownForm.hidden && !submitting) {
@@ -74,10 +118,9 @@
     showResult(`正在处理条码 ${barcode}…`);
     try {
       const clientScanId = crypto.randomUUID();
-      const response = await fetch("/api/scans", {
+      const response = await apiFetch("/api/scans", {
         method: "POST",
         cache: "no-store",
-        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ barcode, operation: mode, client_scan_id: clientScanId }),
       });
@@ -85,6 +128,9 @@
       const message = payload.message || payload.detail || "扫码处理失败";
       if (payload.status === "SUCCESS") {
         showResult(message, "success");
+        speak(message);
+      } else if (payload.status === "OUT_OF_STOCK") {
+        showResult(message, "error");
         speak(message);
       } else if (payload.status === "UNKNOWN_BARCODE_REQUIRES_INPUT") {
         showResult(message, "error");
@@ -132,10 +178,9 @@
       edition: String(fields.get("edition")).trim() || null,
     };
     try {
-      const response = await fetch("/api/scans/resolve-unknown", {
+      const response = await apiFetch("/api/scans/resolve-unknown", {
         method: "POST",
         cache: "no-store",
-        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -220,6 +265,38 @@
   window.addEventListener("online", updateNetwork);
   window.addEventListener("offline", updateNetwork);
   updateNetwork();
+
+  document.querySelector("#transactions-button").addEventListener("click", async () => {
+    const response = await apiFetch("/api/transactions");
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) { showResult(payload.detail || "读取流水失败", "error"); return; }
+    const list = document.querySelector("#transaction-list");
+    list.replaceChildren(...payload.items.map((item) => {
+      const card = document.createElement("article"); card.className = "transaction-card";
+      const title = document.createElement("strong"); title.textContent = `${item.game_name} · ${item.operation_type}`;
+      const detail = document.createElement("p"); detail.textContent = `${item.barcode}｜${item.username}｜库存 ${item.quantity_before} → ${item.quantity_after}${item.reversed ? "｜已撤销" : ""}`;
+      card.append(title, detail); return card;
+    }));
+    homePanel.hidden = true; transactionsPanel.hidden = false;
+  });
+  document.querySelector("#transactions-back").addEventListener("click", () => {
+    transactionsPanel.hidden = true; homePanel.hidden = false;
+  });
+  document.querySelector("#undo-button").addEventListener("click", async () => {
+    const preview = await apiFetch("/api/transactions?page_size=1");
+    const data = await preview.json().catch(() => ({}));
+    const item = data.items?.find((entry) => !entry.reversed && entry.operation_type !== "REVERSAL");
+    if (!item) { window.alert("没有可撤销的流水"); return; }
+    if (!window.confirm(`确认撤销 ${item.game_name} 的 ${item.operation_type}？`)) return;
+    const response = await apiFetch("/api/transactions/undo-last", { method: "POST" });
+    const payload = await response.json().catch(() => ({}));
+    showResult(response.ok ? payload.message : (payload.detail || "撤销失败"), response.ok ? "success" : "error");
+    if (response.ok) { speak(payload.message); focusScanner(); }
+  });
+
+  void apiFetch("/api/auth/me").then(async (response) => {
+    if (response.ok) { const user = await response.json(); csrfToken = user.csrf_token; showHome(user); } else showLogin();
+  });
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {

@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import scans_router
+from app.api import admin_router, auth_router, scans_router, transactions_router
 from app.config import settings
 from app.database import engine
 
@@ -30,6 +30,9 @@ app = FastAPI(
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(scans_router)
+app.include_router(auth_router)
+app.include_router(transactions_router)
+app.include_router(admin_router)
 
 
 @app.get("/", include_in_schema=False)

@@ -42,4 +42,10 @@ h2 { text-align: center; font-size: clamp(1.7rem, 8vw, 2.5rem); }
 .unknown-actions .secondary-button { margin: 0; border: 2px solid #17324d; color: #17324d; background: white; }
 .update-notice { position: fixed; right: 1rem; bottom: 1rem; left: 1rem; max-width: 40rem; margin: auto; padding: 1rem; color: white; background: #14202b; border-radius: .75rem; box-shadow: 0 4px 16px #0006; }
 .update-notice button { margin-left: .5rem; border: 1px solid white; }
+.error-text { color: #8a1c1c; font-weight: 700; }
+#session-bar { display: flex; align-items: center; justify-content: space-between; padding: .5rem 0; }
+#session-bar .text-button { width: auto; margin: 0; }
+.transaction-list { display: grid; gap: .65rem; }
+.transaction-card { padding: .8rem; border: 1px solid #cbd5de; border-radius: .65rem; }
+.transaction-card p { margin: .25rem 0; }
 @media (max-width: 350px) { .app-shell { padding-inline: .65rem; } .status-bar { align-items: flex-start; } .network { font-size: .85rem; } }
