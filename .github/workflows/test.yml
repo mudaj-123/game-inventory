@@ -44,4 +44,10 @@ jobs:
       - run: uv run python -m compileall -q app alembic tests
       - run: node --check app/static/app.js
       - run: node --check app/static/service-worker.js
+      - run: docker build -t game-inventory:test .
+      - run: cp .env.production.example .env.production
+      - run: docker compose --env-file .env.production -f docker-compose.prod.yml config
+        env:
+          POSTGRES_PASSWORD: ci-placeholder
+      - run: bash -n scripts/backup-postgres.sh scripts/restore-postgres.sh
       - run: git diff --check

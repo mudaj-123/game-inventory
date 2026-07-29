@@ -19,6 +19,7 @@ build/
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # Runtime data
 *.db
@@ -28,6 +29,7 @@ build/
 *.sqlite3
 data/exports/*
 !data/exports/.gitkeep
+backups/
 
 # Editors and operating systems
 .vscode/*
