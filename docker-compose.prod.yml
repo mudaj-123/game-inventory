@@ -25,9 +25,7 @@ services:
         max-file: "5"
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${APP_IMAGE:?set APP_IMAGE in .env.production}
     restart: unless-stopped
     env_file:
       - .env.production

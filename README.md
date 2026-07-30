@@ -150,11 +150,14 @@ python3.12 -c 'import secrets; print(secrets.token_urlsafe(64))'
 chmod 600 .env.production
 ```
 
-编辑 `.env.production`，为 `POSTGRES_PASSWORD` 和 `SECRET_KEY` 设置互不复用的强随机值，并让 `DATABASE_URL` 的用户名、密码、数据库名与三个 `POSTGRES_*` 变量完全一致。主机必须使用 Docker 内部服务名 `db`，例如 `postgresql+asyncpg://inventory:URL编码后的密码@db:5432/inventory`。若密码含 `@`、`:`、`/` 等字符，须先进行 URL 编码。`APP_HOST_PORT` 控制应用在宿主机回环地址上的监听端口；保留 `18080` 即使用默认示例，端口冲突时可改为 `18081`。
+应用镜像由 GitHub Actions 在全部测试通过后构建并发布到 Docker Hub；生产服务器只负责拉取镜像和启动容器，不再构建应用镜像，因此不需要访问 PyPI 或 `ghcr.io`。编辑 `.env.production`，必须把 `APP_IMAGE` 中的两个明确占位符替换为实际 Docker Hub 用户名和已经通过 CI 的完整 `sha-<commit SHA>` 标签；不要将示例占位符直接用于部署，也不要用 `main` 或 `latest` 作为长期固定的生产版本。
+
+同时为 `POSTGRES_PASSWORD` 和 `SECRET_KEY` 设置互不复用的强随机值，并让 `DATABASE_URL` 的用户名、密码、数据库名与三个 `POSTGRES_*` 变量完全一致。主机必须使用 Docker 内部服务名 `db`，例如 `postgresql+asyncpg://inventory:URL编码后的密码@db:5432/inventory`。若密码含 `@`、`:`、`/` 等字符，须先进行 URL 编码。`APP_HOST_PORT` 控制应用在宿主机回环地址上的监听端口；保留 `18080` 即使用默认示例，端口冲突时可改为 `18081`。Docker Hub 访问令牌只存放在 GitHub Actions Secret `DOCKERHUB_TOKEN` 中，绝不能写入 `.env.production`；若镜像仓库公开，生产服务器无需执行 `docker login`。
 
 ```bash
-# 构建并启动；app 会等待 db 健康，入口脚本随后自动执行 alembic upgrade head
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+# 拉取并启动；app 会等待 db 健康，入口脚本随后自动执行 alembic upgrade head
+docker compose --env-file .env.production -f docker-compose.prod.yml pull app db
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 docker compose --env-file .env.production -f docker-compose.prod.yml ps
 curl --fail http://127.0.0.1:18080/health
 
@@ -183,16 +186,22 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec app py
 # 日志（已按每文件 10 MiB、最多 5 个文件轮转）
 docker compose --env-file .env.production -f docker-compose.prod.yml logs -f --tail=200 app db
 
-# 更新前先备份，并记录当前提交；审阅代码后再构建
+# 更新前先备份数据库，并记录当前固定镜像
 ./scripts/backup-postgres.sh
-git rev-parse HEAD
-git fetch origin
-git checkout <reviewed-release-or-commit>
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+sed -n 's/^APP_IMAGE=//p' .env.production
 
-# 回滚应用：检出已记录的旧提交并重建。迁移能否降级须逐版本审阅，切勿盲目 downgrade。
-git checkout <previous-known-good-commit>
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+# 将 .env.production 的 APP_IMAGE 改为新的、已经通过 CI 的 sha 标签，然后拉取并启动
+docker compose --env-file .env.production -f docker-compose.prod.yml pull app
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+docker compose --env-file .env.production -f docker-compose.prod.yml ps
+curl --fail http://127.0.0.1:18080/health
+
+# 回滚应用：把 APP_IMAGE 改回上一个已知正常的 sha 标签，再拉取并启动。
+# 迁移能否降级须逐版本审阅，切勿盲目 downgrade。
+docker compose --env-file .env.production -f docker-compose.prod.yml pull app
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+docker compose --env-file .env.production -f docker-compose.prod.yml ps
+curl --fail http://127.0.0.1:18080/health
 
 # 停止本项目（保留数据库卷）
 docker compose --env-file .env.production -f docker-compose.prod.yml stop
@@ -204,7 +213,9 @@ df -h
 docker volume inspect game_inventory_postgres_data
 ```
 
-> **数据安全警告：** 不要随意运行 `docker compose down -v`、`docker volume rm` 或任何清卷命令；`-v` 会删除数据库持久卷。普通 `stop`、`down`（不带 `-v`）和重新构建不会主动删除命名卷，但操作前仍应备份并核对命令。OpenClaw 不在此 Compose 项目内，不应对其容器执行任何操作。
+只有 `docker compose ps` 显示服务健康且健康检查请求成功后，更新或回滚才算完成。`main` 标签仅便于查看发布结果，不能替代可追溯的 `sha-<完整提交 SHA>` 生产固定版本；生产环境也不使用 `latest`。
+
+> **数据安全警告：** 不要随意运行 `docker compose down -v`、`docker volume rm` 或任何清卷命令；`-v` 会删除数据库持久卷。普通 `stop`、`down`（不带 `-v`）不会主动删除命名卷，但操作前仍应备份并核对命令。OpenClaw 不在此 Compose 项目内，不应对其容器执行任何操作。
 
 Compose 数据用途如下：
 

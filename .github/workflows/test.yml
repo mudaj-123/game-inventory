@@ -44,10 +44,32 @@ jobs:
       - run: uv run python -m compileall -q app alembic tests
       - run: node --check app/static/app.js
       - run: node --check app/static/service-worker.js
-      - run: docker build -t game-inventory:test .
+      - run: docker build --label org.opencontainers.image.revision="$GITHUB_SHA" -t game-inventory:test .
       - run: cp .env.production.example .env.production
       - run: docker compose --env-file .env.production -f docker-compose.prod.yml config
         env:
           POSTGRES_PASSWORD: ci-placeholder
       - run: bash -n scripts/backup-postgres.sh scripts/restore-postgres.sh
       - run: git diff --check
+      - name: Validate Docker Hub username
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+        run: test -n "$DOCKERHUB_USERNAME"
+      - name: Log in to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Tag and push tested image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+        run: |
+          IMAGE="$DOCKERHUB_USERNAME/game-inventory"
+          docker tag game-inventory:test "$IMAGE:sha-$GITHUB_SHA"
+          docker tag game-inventory:test "$IMAGE:main"
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          docker push "$IMAGE:main"
+          echo "Published $IMAGE:sha-$GITHUB_SHA and $IMAGE:main for commit $GITHUB_SHA"
