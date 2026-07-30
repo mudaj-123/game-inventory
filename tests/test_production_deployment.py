@@ -19,6 +19,9 @@ def test_production_compose_security_and_operations() -> None:
     db_section, app_section = compose.split("  app:\n", 1)
 
     assert "ports:" not in db_section
+    assert "image: postgres:16.3-bookworm" in db_section
+    assert "image: ${APP_IMAGE:?set APP_IMAGE in .env.production}" in app_section
+    assert "build:" not in app_section
     assert '"127.0.0.1:${APP_HOST_PORT:-18080}:8000"' in app_section
     assert '"0.0.0.0:${APP_HOST_PORT' not in app_section
     assert "healthcheck:" in db_section
@@ -46,7 +49,30 @@ def test_production_environment_template_has_no_secrets() -> None:
     assert values["SECRET_KEY"] == ""
     assert values["POSTGRES_PASSWORD"] == ""
     assert values["APP_HOST_PORT"] == "18080"
+    assert values["APP_IMAGE"] == (
+        "docker.io/REPLACE_WITH_DOCKERHUB_USERNAME/"
+        "game-inventory:sha-REPLACE_WITH_COMMIT_SHA"
+    )
+    assert ":latest" not in values["APP_IMAGE"]
     assert "@db:5432/" in values["DATABASE_URL"]
+
+
+def test_ci_publishes_only_tested_main_push_image() -> None:
+    workflow = (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
+    publish_condition = (
+        "if: github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    )
+
+    assert workflow.count(publish_condition) == 3
+    assert "docker/login-action@v4" in workflow
+    assert "${{ vars.DOCKERHUB_USERNAME }}" in workflow
+    assert "${{ secrets.DOCKERHUB_TOKEN }}" in workflow
+    assert 'test -n "$DOCKERHUB_USERNAME"' in workflow
+    assert "docker tag game-inventory:test" in workflow
+    assert '"$IMAGE:sha-$GITHUB_SHA"' in workflow
+    assert '"$IMAGE:main"' in workflow
+    assert "docker push" in workflow
+    assert ":latest" not in workflow
 
 
 def test_maintenance_scripts_and_current_readme() -> None:
