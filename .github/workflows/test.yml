@@ -43,6 +43,8 @@ jobs:
       - run: uv run ruff check .
       - run: uv run python -m compileall -q app alembic tests
       - run: node --check app/static/app.js
+      - run: node --check app/static/transaction-groups.js
+      - run: node --test tests/js/*.test.cjs
       - run: node --check app/static/service-worker.js
       - run: docker build --label org.opencontainers.image.revision="$GITHUB_SHA" -t game-inventory:test .
       - run: cp .env.production.example .env.production

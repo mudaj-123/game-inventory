@@ -49,3 +49,54 @@ h2 { text-align: center; font-size: clamp(1.7rem, 8vw, 2.5rem); }
 .transaction-card { padding: .8rem; border: 1px solid #cbd5de; border-radius: .65rem; }
 .transaction-card p { margin: .25rem 0; }
 @media (max-width: 350px) { .app-shell { padding-inline: .65rem; } .status-bar { align-items: flex-start; } .network { font-size: .85rem; } }
+/* 今日流水：紧凑、触摸友好，并允许不可信的长文本自然换行。 */
+#transactions-panel h2 { margin-bottom: .6rem; }
+.transaction-feedback, .transaction-stats, .transaction-empty { overflow-wrap: anywhere; }
+.transaction-feedback { min-height: 1.5rem; margin: .35rem 0; padding: .55rem; border-radius: .5rem; }
+.transaction-feedback:empty { padding: 0; min-height: 0; }
+.transaction-feedback.loading { background: #eaf2f8; }
+.transaction-feedback.success { color: #075c36; background: #e4f7ed; }
+.transaction-feedback.warning { color: #6d4700; background: #fff4ce; }
+.transaction-feedback.error { color: #8a1c1c; background: #fff0ef; font-weight: 700; }
+.transaction-stats { margin: .65rem 0; color: #425563; font-weight: 700; }
+.transaction-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .35rem; }
+.transaction-filters button { min-height: 44px; padding: .35rem .15rem; border: 1px solid #8a99a5; border-radius: .55rem; background: white; }
+.transaction-filters button[aria-pressed="true"] { color: white; border-color: #17324d; background: #17324d; font-weight: 700; }
+.transaction-group { min-width: 0; border: 1px solid #cbd5de; border-radius: .7rem; background: white; overflow: clip; }
+.transaction-group[open] { border-color: #7890a2; box-shadow: 0 2px 7px #12202b1f; }
+.transaction-group summary { min-height: 48px; padding: .72rem .8rem; cursor: pointer; overflow-wrap: anywhere; }
+.transaction-group summary::marker { color: #17324d; }
+.group-title, .group-line, .group-expand { display: block; margin-left: .2rem; }
+.group-title { font-size: 1.05rem; color: #14202b; }
+.group-line { margin-top: .2rem; color: #52616d; font-size: .91rem; }
+.group-net { color: #17324d; font-weight: 700; }
+.group-expand { margin-top: .35rem; color: #075c68; font-size: .88rem; text-decoration: underline; }
+.orphan-label { color: #8a1c1c; font-weight: 700; }
+.group-details { display: grid; gap: .55rem; padding: .65rem; border-top: 1px solid #d8e0e7; background: #f6f8fa; }
+.transaction-detail { min-width: 0; padding: .7rem; border: 1px solid #d6dee5; border-radius: .55rem; background: white; overflow-wrap: anywhere; }
+.transaction-detail p { margin: .28rem 0; }
+.transaction-detail-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .3rem; }
+.reversed-badge { display: inline-block; margin: .25rem 0; padding: .2rem .45rem; border: 1px solid #735c00; border-radius: 999px; color: #5d4900; background: #fff4ce; font-weight: 700; }
+.reverse-block-reason { color: #616b72; font-size: .9rem; }
+.reversal-record { margin-top: .55rem; padding: .6rem; border-left: .3rem solid #735c00; background: #fff8dd; overflow-wrap: anywhere; }
+.reversal-record p { margin: .2rem 0; }
+.danger-button { min-height: 44px; padding: .55rem .8rem; border: 0; border-radius: .55rem; color: white; background: #a2261c; font-weight: 700; }
+.danger-button:disabled { color: #555; background: #d9dfe3; cursor: wait; }
+.reverse-item-button { width: 100%; margin-top: .5rem; }
+.retry-button { margin: .2rem 0; }
+.reverse-dialog { width: min(calc(100% - 1.2rem), 34rem); max-height: calc(100dvh - 1.2rem); padding: 1rem; border: 0; border-radius: .8rem; box-shadow: 0 8px 30px #0006; }
+.reverse-dialog::backdrop { background: #0b1720b8; }
+.reverse-dialog h2 { margin: 0 0 .7rem; font-size: 1.35rem; }
+.reverse-dialog dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .3rem .55rem; }
+.reverse-dialog dt { font-weight: 700; }
+.reverse-dialog dd { margin: 0; overflow-wrap: anywhere; }
+.dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.dialog-actions .secondary-button { margin: 0; }
+.transaction-empty { padding: 1.2rem; text-align: center; color: #52616d; background: #f3f6f8; border-radius: .65rem; }
+.break-text { overflow-wrap: anywhere; }
+@media (max-width: 350px) {
+  .transaction-filters { grid-template-columns: 1fr 1fr; }
+  .reverse-dialog { padding: .75rem; }
+  .reverse-dialog dl { grid-template-columns: 1fr; }
+  .reverse-dialog dd { margin-bottom: .25rem; }
+}

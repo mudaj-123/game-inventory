@@ -15,6 +15,9 @@ class TransactionItem(BaseModel):
     username: str
     created_at: datetime
     reversed: bool
+    related_transaction_id: int | None
+    can_reverse: bool
+    reverse_block_reason: str | None
 
 
 class TransactionPage(BaseModel):

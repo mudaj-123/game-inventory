@@ -39,13 +39,32 @@
           </button>
         </div>
         <button id="transactions-button" class="secondary-button" type="button">今日流水</button>
-        <button id="undo-button" class="secondary-button" type="button">撤销上一步</button>
       </section>
 
       <section id="transactions-panel" hidden><h2>今日流水</h2>
+        <p id="transaction-feedback" class="transaction-feedback" role="status" aria-live="polite"></p>
+        <div id="transaction-filters" class="transaction-filters" aria-label="流水筛选">
+          <button type="button" data-filter="ALL" aria-pressed="true">全部</button>
+          <button type="button" data-filter="IN" aria-pressed="false">入库</button>
+          <button type="button" data-filter="SALE_OUT" aria-pressed="false">出库</button>
+          <button type="button" data-filter="REVERSED" aria-pressed="false">含已撤销</button>
+        </div>
+        <p id="transaction-stats" class="transaction-stats"></p>
         <div id="transaction-list" class="transaction-list"></div>
         <button id="transactions-back" class="secondary-button" type="button">返回</button>
       </section>
+
+      <dialog id="reverse-dialog" class="reverse-dialog" aria-labelledby="reverse-dialog-title">
+        <form method="dialog">
+          <h2 id="reverse-dialog-title">确认撤销这笔操作？</h2>
+          <dl id="reverse-confirm-details"></dl>
+          <p>此操作不会删除原流水；系统会新增一笔 REVERSAL 流水；实际库存结果由服务器重新检查。</p>
+          <div class="dialog-actions">
+            <button value="cancel" class="secondary-button" type="submit">取消</button>
+            <button id="reverse-confirm" value="confirm" class="danger-button" type="submit">确认撤销</button>
+          </div>
+        </form>
+      </dialog>
 
       <section id="scan-panel" class="scan-panel" hidden aria-labelledby="mode-title">
         <p class="eyebrow">当前操作</p>
@@ -95,6 +114,7 @@
         新版本已就绪。<button id="apply-update" type="button">立即更新</button>
       </aside>
     </main>
+    <script src="/static/transaction-groups.js" defer></script>
     <script src="/static/app.js" defer></script>
   </body>
 </html>

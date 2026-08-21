@@ -176,3 +176,40 @@ async def test_staff_cannot_reverse_other_or_expired(raw_client: TestClient,
     forbidden = raw_client.post(f"/api/transactions/{old.id}/reverse",
                                 headers={"X-CSRF-Token": csrf})
     assert forbidden.status_code == 409
+
+async def test_transaction_list_exposes_precise_reverse_eligibility(
+    raw_client: TestClient, factory: async_sessionmaker[AsyncSession]
+) -> None:
+    await seed_product(factory)
+    csrf = login(raw_client)
+    first = scan(raw_client, csrf)
+    second = scan(raw_client, csrf)
+    items = raw_client.get("/api/transactions").json()["items"]
+    by_id = {item["transaction_id"]: item for item in items}
+    assert by_id[second["transaction_id"]]["can_reverse"] is True
+    assert by_id[second["transaction_id"]]["reverse_block_reason"] is None
+    assert by_id[first["transaction_id"]]["can_reverse"] is False
+    assert by_id[first["transaction_id"]]["reverse_block_reason"] == "只能撤销最近一条可撤销流水"
+
+    reversed_response = raw_client.post(
+        f"/api/transactions/{second['transaction_id']}/reverse",
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert reversed_response.status_code == 200
+    items = raw_client.get("/api/transactions").json()["items"]
+    by_id = {item["transaction_id"]: item for item in items}
+    original = by_id[second["transaction_id"]]
+    reversal = by_id[reversed_response.json()["transaction_id"]]
+    assert original["can_reverse"] is False and original["reverse_block_reason"] == "该流水已被撤销"
+    assert reversal["related_transaction_id"] == second["transaction_id"]
+    assert reversal["can_reverse"] is False
+    assert reversal["reverse_block_reason"] == "撤销流水不能再次撤销"
+    assert by_id[first["transaction_id"]]["can_reverse"] is True
+
+
+def test_frontend_uses_only_precise_reverse_endpoint() -> None:
+    app_javascript = Path("app/static/app.js").read_text(encoding="utf-8")
+    index_html = Path("app/static/index.html").read_text(encoding="utf-8")
+    assert "/api/transactions/undo-last" not in app_javascript
+    assert 'id="undo-button"' not in index_html
+    assert "/api/transactions/${item.transaction_id}/reverse" in app_javascript
