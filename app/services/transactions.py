@@ -24,6 +24,32 @@ def _today_bounds() -> tuple[datetime, datetime]:
     return start.astimezone(UTC), (start + timedelta(days=1)).astimezone(UTC)
 
 
+def _get_reverse_eligibility(
+    tx: InventoryTransaction,
+    user: CurrentUser,
+    was_reversed: bool,
+    latest_reversible_id: int | None,
+    now: datetime,
+) -> tuple[bool, str | None]:
+    """Describe list-time eligibility; execution still repeats every atomic check."""
+    if tx.operation_type == "REVERSAL":
+        return False, "撤销流水不能再次撤销"
+    if was_reversed:
+        return False, "该流水已被撤销"
+    if user.role == "ADMIN":
+        return True, None
+    if tx.user_id != user.id:
+        return False, "只能撤销自己的流水"
+    if tx.id != latest_reversible_id:
+        return False, "只能撤销最近一条可撤销流水"
+    created_at = tx.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    if now - created_at > timedelta(minutes=settings.undo_window_minutes):
+        return False, "流水已超过撤销时间窗口"
+    return True, None
+
+
 async def list_transactions(session: AsyncSession, user: CurrentUser, page: int, page_size: int,
                             operation_type: str | None) -> TransactionPage:
     start, end = _today_bounds()
@@ -49,12 +75,22 @@ async def list_transactions(session: AsyncSession, user: CurrentUser, page: int,
         .order_by(InventoryTransaction.created_at.desc(), InventoryTransaction.id.desc())
         .offset((page - 1) * page_size).limit(page_size)
     )).all()
-    items = [TransactionItem(transaction_id=tx.id, game_name=tx.game_name_snapshot,
-        barcode=tx.barcode_snapshot, platform=tx.platform_snapshot,
-        operation_type=tx.operation_type, quantity_delta=tx.quantity_delta,
-        quantity_before=tx.quantity_before, quantity_after=tx.quantity_after,
-        username=username, created_at=tx.created_at, reversed=bool(was_reversed))
-        for tx, username, was_reversed in rows]
+    latest_reversible_id = None
+    if user.role != "ADMIN":
+        latest_reversible_id = await _latest_reversible_id(session, user)
+    now = datetime.now(UTC)
+    items = []
+    for tx, username, was_reversed in rows:
+        can_reverse, reason = _get_reverse_eligibility(
+            tx, user, bool(was_reversed), latest_reversible_id, now
+        )
+        items.append(TransactionItem(transaction_id=tx.id, game_name=tx.game_name_snapshot,
+            barcode=tx.barcode_snapshot, platform=tx.platform_snapshot,
+            operation_type=tx.operation_type, quantity_delta=tx.quantity_delta,
+            quantity_before=tx.quantity_before, quantity_after=tx.quantity_after,
+            username=username, created_at=tx.created_at, reversed=bool(was_reversed),
+            related_transaction_id=tx.related_transaction_id, can_reverse=can_reverse,
+            reverse_block_reason=reason))
     return TransactionPage(items=items, page=page, page_size=page_size, total=total)
 
 
