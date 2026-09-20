@@ -1,5 +1,14 @@
 # Repository guidance
 
+## Required project context
+
+- Before planning or changing this repository, read `docs/CURRENT_REQUIREMENTS.md`.
+- `docs/CURRENT_REQUIREMENTS.md` is the authoritative description of the current business,
+  deployment, data-safety, and operational requirements. It supersedes conflicting historical
+  assumptions elsewhere in the repository.
+- Preserve working functionality and production data. Make incremental changes after auditing the
+  existing implementation; do not replace the application merely to adopt a newer architecture.
+
 ## Scope
 
 These instructions apply to the entire repository.
