@@ -1,5 +1,11 @@
 # 实体游戏库存管理系统
 
+> **当前项目方向：** 店铺内的 Windows 10 电脑是主要生产服务器，PostgreSQL 和
+> FastAPI 均原生运行；Docker/云服务器方案继续保留为可选部署、CI 和灾备能力。
+> 所有开发和部署工作开始前，请先阅读
+> [`docs/CURRENT_REQUIREMENTS.md`](docs/CURRENT_REQUIREMENTS.md)。该文档是当前需求与架构
+> 决策的权威来源；与旧文档发生冲突时，以该文档为准。
+
 面向实体游戏店的移动端库存管理系统。目标运行环境为 Python 3.12、FastAPI、SQLAlchemy 2.x 与 Alembic；正式环境使用 PostgreSQL，本地开发和测试可使用 SQLite。条码始终按字符串处理并保留前导零，商品识别优先使用服务器本地目录，不依赖第三方在线条码识别服务。
 
 当前版本包含 Cookie 认证、角色权限、归属到操作员的扫码流水、今日流水以及只追加的安全撤销。
