@@ -56,3 +56,9 @@ def test_scanner_handles_business_status_and_unknown_resolution() -> None:
     assert 'id="unknown-barcode" name="barcode" readonly' in page
     for platform in ("PS5", "PS4", "SWITCH", "SWITCH2"):
         assert f'value="{platform}"' in page
+
+
+def test_initial_service_worker_activation_does_not_reload_in_progress_forms() -> None:
+    source = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    assert 'if (updateRequested) window.location.reload()' in source
+    assert 'window.isSecureContext' in source

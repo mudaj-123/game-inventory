@@ -569,7 +569,8 @@
     if (response.ok) { const user = await response.json(); csrfToken = user.csrf_token; showHome(user); } else showLogin();
   });
 
-  if ("serviceWorker" in navigator) {
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    let updateRequested = false;
     window.addEventListener("load", async () => {
       const registration = await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
       registration.addEventListener("updatefound", () => {
@@ -581,9 +582,16 @@
         });
       });
       document.querySelector("#apply-update").addEventListener("click", () => {
+        if (pendingScan.get() || submitting || unknownScanId || adjustmentPending) {
+          alert("请先完成或核对当前操作，再更新页面。"); return;
+        }
+        updateRequested = true;
         registration.waiting?.postMessage({ type: "SKIP_WAITING" });
       });
-      navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload());
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        // First install calls clients.claim(); never erase a login or scan in progress.
+        if (updateRequested) window.location.reload();
+      });
     });
   }
 })();

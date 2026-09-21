@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 (async () => {
   const browser = await chromium.launch({headless:true});
   const page = await browser.newPage({ viewport: {width:390,height:844} });
-  const errors=[]; page.on('pageerror', e=>errors.push(e.message));
+  const errors=[]; page.on('pageerror', e=>{errors.push(e.message);console.error('Page error:',e.message);});
   await page.goto('http://127.0.0.1:18085');
   await page.fill('#login-username','browser-admin');
   await page.fill('#login-password','test-password');
