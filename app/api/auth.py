@@ -31,7 +31,7 @@ async def login(body: LoginRequest, response: Response, session: Db) -> UserResp
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     token, csrf = create_session_token(user.id)
     response.set_cookie(SESSION_COOKIE, token, max_age=settings.session_max_age_seconds,
-                        httponly=True, secure=settings.app_env == "production", samesite="lax",
+                        httponly=True, secure=settings.secure_cookie, samesite="lax",
                         path="/")
     return UserResponse(id=user.id, username=user.username, role=user.role, csrf_token=csrf)
 
@@ -39,7 +39,7 @@ async def login(body: LoginRequest, response: Response, session: Db) -> UserResp
 @router.post("/logout", status_code=204)
 async def logout(response: Response, _: Annotated[None, Depends(verify_csrf)]) -> None:
     response.delete_cookie(SESSION_COOKIE, path="/", httponly=True,
-                           secure=settings.app_env == "production", samesite="lax")
+                           secure=settings.secure_cookie, samesite="lax")
 
 
 @router.get("/me", response_model=UserResponse)

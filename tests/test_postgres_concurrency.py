@@ -185,3 +185,18 @@ async def test_concurrent_duplicate_reversal_succeeds_once(
         )
     assert product is not None and product.quantity == 0
     assert reversal_count == 1
+
+
+async def test_concurrent_dashboard_does_not_duplicate_active_alerts(postgres_factory):
+    from app.models import StockAlert
+    from app.services.alerts import refresh_all_alerts
+    await add_catalog(postgres_factory, "00000015")
+    await run_scan(postgres_factory, request("00000015", "IN"))
+    async def refresh():
+        async with postgres_factory() as session, session.begin():
+            await refresh_all_alerts(session)
+    await asyncio.gather(refresh(), refresh())
+    async with postgres_factory() as session:
+        count = await session.scalar(select(func.count(StockAlert.id)).where(
+            StockAlert.closed_at.is_(None)))
+    assert count == 1

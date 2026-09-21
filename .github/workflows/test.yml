@@ -39,6 +39,7 @@ jobs:
       - run: uv sync --all-extras
       - run: uv run alembic upgrade head
       - run: uv run pytest -q -m 'not postgres'
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
       - run: uv run pytest -q -m postgres
       - run: uv run ruff check .
       - run: uv run python -m compileall -q app alembic tests
@@ -75,3 +76,11 @@ jobs:
           docker push "$IMAGE:sha-$GITHUB_SHA"
           docker push "$IMAGE:main"
           echo "Published $IMAGE:sha-$GITHUB_SHA and $IMAGE:main for commit $GITHUB_SHA"
+
+  windows-syntax:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse all operational scripts with Windows PowerShell 5.1
+        shell: powershell
+        run: .\scripts\windows\check-syntax.ps1

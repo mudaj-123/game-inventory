@@ -5,7 +5,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
 $taskName = 'GameInventory'
-if ($Uninstall) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue; Write-Host 'Startup task removed.'; exit 0 }
+if ($Uninstall) { & (Join-Path $PSScriptRoot 'stop.ps1'); Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue; Write-Host 'Startup task removed.'; exit 0 }
 $scriptPath = Join-Path $PSScriptRoot 'start.ps1'
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -Foreground" -WorkingDirectory $ProjectRoot
 $trigger = New-ScheduledTaskTrigger -AtStartup

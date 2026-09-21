@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./inventory.db"
     app_host: str = "127.0.0.1"
     app_port: int = Field(default=18081, ge=1, le=65535)
+    session_cookie_secure: bool | None = None
     log_level: str = "INFO"
     log_dir: Path = Path("./logs")
 
@@ -44,6 +45,13 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_subject: str = "mailto:example@example.com"
     alert_webhook_url: str = ""
+
+
+    @property
+    def secure_cookie(self) -> bool:
+        if self.session_cookie_secure is not None:
+            return self.session_cookie_secure
+        return self.app_env == "production"
 
 
 @lru_cache

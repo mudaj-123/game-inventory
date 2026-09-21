@@ -8,6 +8,7 @@ from app.auth import CurrentUser
 from app.config import settings
 from app.models import CatalogEntry, InventoryTransaction, Product
 from app.schemas import ResolveUnknownRequest, ScanRequest, ScanResponse
+from app.services.alerts import refresh_product_alerts
 from app.services.catalog import normalize_name
 
 MAX_TRANSACTION_ATTEMPTS = 3
@@ -93,7 +94,10 @@ async def _change_quantity(
     )
     session.add(transaction)
     await session.flush()
-    return _response_from_transaction(transaction, False)
+    await session.refresh(product)
+    response = _response_from_transaction(transaction, False)
+    response.alerts = await refresh_product_alerts(session, product)
+    return response
 
 
 async def _process_scan_once(
@@ -103,6 +107,7 @@ async def _process_scan_once(
     async with session.begin():
         previous = await _existing_transaction(session, scan_id)
         if previous is not None:
+            _validate_replay(previous, scan.barcode, scan.operation, user)
             return _response_from_transaction(previous, True)
 
         product = await session.scalar(select(Product).where(Product.barcode == scan.barcode))
@@ -165,6 +170,7 @@ async def _resolve_unknown_once(
     async with session.begin():
         previous = await _existing_transaction(session, scan_id)
         if previous is not None:
+            _validate_replay(previous, request.barcode, "IN", user)
             return _response_from_transaction(previous, True)
         product = await session.scalar(select(Product).where(Product.barcode == request.barcode))
         if product is None:
@@ -210,3 +216,10 @@ async def resolve_unknown(
                     "未知条码补录发生并发冲突，请重新扫描。"
                 ) from error
     raise AssertionError("unreachable")
+
+
+def _validate_replay(tx: InventoryTransaction, barcode: str, operation: str,
+                     user: CurrentUser) -> None:
+    expected = "IN" if operation == "IN" else "SALE_OUT"
+    if (tx.barcode_snapshot, tx.operation_type, tx.user_id) != (barcode, expected, user.id):
+        raise InventoryConflictError("请求编号已被其他操作使用，请核对原流水。")

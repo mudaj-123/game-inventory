@@ -17,7 +17,7 @@ Staff = Annotated[CurrentUser, Depends(require_staff)]
 @router.get("", response_model=TransactionPage)
 async def today(session: Db, user: Staff, page: Annotated[int, Query(ge=1)] = 1,
                 page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-                operation_type: Literal["IN", "SALE_OUT", "REVERSAL"] | None = None
+                operation_type: Literal["IN", "SALE_OUT", "ADJUST", "REVERSAL"] | None = None
                 ) -> TransactionPage:
     return await list_transactions(session, user, page, page_size, operation_type)
 

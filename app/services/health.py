@@ -14,6 +14,6 @@ async def database_is_healthy(session: AsyncSession) -> bool:
     try:
         await session.execute(text("SELECT 1"))
     except Exception:  # 数据库驱动异常类型因后端而异，健康端点统一降级。
-        logger.exception("Database health query failed")
+        logger.error("Database health query failed (connection details suppressed)")
         return False
     return True

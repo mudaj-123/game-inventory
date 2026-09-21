@@ -28,23 +28,28 @@ def test_windows_startup_migrates_before_uvicorn() -> None:
 
 
 def test_backup_is_atomic_and_uses_official_tools() -> None:
-    script = (WINDOWS / "backup.ps1").read_text(encoding="utf-8")
-    assert "pg_dump.exe" in script
-    assert "pg_restore.exe" in script
-    assert '"$final.tmp"' in script
-    assert "Move-Item" in script
-    assert "BACKUP_RETENTION_DAYS" in script
-    assert "PGPASSWORD" not in script
+    source = (ROOT / "app/operations.py").read_text(encoding="utf-8")
+    assert '"pg_dump"' in source and '"pg_restore"' in source
+    assert 'temporary.replace(final)' in source
+    assert '"--format=custom"' in source
+    assert 'capture_output=True' in source
 
 
 def test_restore_requires_explicit_matching_target() -> None:
     script = (WINDOWS / "restore.ps1").read_text(encoding="utf-8")
-    assert "ConfirmTarget" in script
+    source = (ROOT / "app/operations.py").read_text(encoding="utf-8")
     assert "TargetDatabase -ne $ConfirmTarget" in script
-    assert "alembic upgrade head" in script
-    assert "psql.exe" in script
-    assert "quantity < 0" in script
-    assert "orphan reversal" in script
+    assert 'target == database_url().database' in source
+    assert '"--single-transaction"' in source
+    assert 'quantity < 0' in source
+    assert 'inventory_drill_' in source
+
+
+def test_stop_checks_process_identity_and_stops_supervisor() -> None:
+    common = (WINDOWS / "common.ps1").read_text(encoding="utf-8")
+    stop = (WINDOWS / "stop.ps1").read_text(encoding="utf-8")
+    assert 'StartTime.ToUniversalTime()' in common and '$process.Path' in common
+    assert stop.index('Stop-ScheduledTask') < stop.index('Stop-Process')
 
 
 def test_windows_environment_template_contains_no_real_secret() -> None:

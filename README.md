@@ -8,7 +8,8 @@
 
 面向实体游戏店的移动端库存管理系统。目标运行环境为 Python 3.12、FastAPI、SQLAlchemy 2.x 与 Alembic；正式环境使用 PostgreSQL，本地开发和测试可使用 SQLite。条码始终按字符串处理并保留前导零，商品识别优先使用服务器本地目录，不依赖第三方在线条码识别服务。
 
-当前版本包含 Cookie 认证、角色权限、归属到操作员的扫码流水、今日流水以及只追加的安全撤销。
+当前版本包含 Cookie 认证、角色权限、连续扫码、今日流水、安全撤销、管理员库存调整与预警。
+本轮实现、审计和验收边界见 [`docs/implementation-status.md`](docs/implementation-status.md)。
 
 ## 环境要求
 
@@ -136,7 +137,7 @@ uv run python -m app.cli create-admin
 
 编辑 `data/catalog/barcode_catalog.csv` 时：
 
-- 使用 UTF-8，导入器后续也会兼容 UTF-8 with BOM；
+- 使用 UTF-8，导入器已兼容 UTF-8 with BOM；
 - 把 `barcode` 列设为文本，保留前导零；
 - 只使用 `PS5`、`PS4`、`SWITCH`、`SWITCH2` 标准平台值；
 - 删除模板中的明显假数据，再加入真实目录记录；
@@ -157,7 +158,7 @@ python3.12 -m ruff check .
 
 ## 当前限制
 
-尚未实现目录导出、预警报表和完整用户管理界面。Windows 脚本已纳入仓库静态检查，但计划任务、
+已实现管理员库存搜索、带原因的调整与四类预警页面。尚未实现目录导出和完整用户管理界面。Windows 脚本已纳入仓库静态检查，但计划任务、
 防火墙、原生 PostgreSQL、HTTPS/PWA、手机和真实 HID 扫码仍须在 Windows 10 店铺机验收。数据库
 升级必须继续使用 Alembic，不能以 `Base.metadata.create_all()` 代替，也不能接入第三方在线条码
 识别作为核心依赖。

@@ -40,3 +40,51 @@
 仓库 CI 只能静态检查 PowerShell。必须在店铺机验证：执行策略和脚本语法、SYSTEM 对仓库/HDD
 权限、PostgreSQL 服务启动顺序、开机重试、日志持续写入、Private 防火墙、真实手机 HTTPS/PWA、
 HID Enter/Tab 连扫、睡眠/断网恢复，以及备份与隔离恢复。这些未在 Linux 环境执行时不得标为通过。
+
+## HTTPS/PWA 与临时 LAN HTTP（必须选择一种）
+
+### 方案 A：Tailscale HTTPS（推荐）
+
+电脑和手机安装官方 Tailscale，加入同一受控 tailnet。应用设置 `APP_HOST=127.0.0.1`，保留
+`APP_ENV=production` 和 `SESSION_COOKIE_SECURE=true`。管理员启用 tailnet HTTPS/MagicDNS 后：
+
+```powershell
+tailscale serve --bg http://127.0.0.1:18081
+tailscale serve status
+```
+
+手机开启 Tailscale 后访问命令输出的 `https://主机名.tailnet名.ts.net`，不可用裸 LAN IP 替代。
+使用 Serve，不启用 Funnel；不做路由器公网端口映射。此模式无需给 LAN 开放原始 18081。
+通过 tailnet 权限规则限制访问者。官方说明：
+https://tailscale.com/docs/reference/tailscale-cli/serve
+
+### 方案 B：原生 LAN HTTPS 反向代理
+
+由管理员为局域网域名配置受所有手机信任的证书和 HTTPS 反向代理到本机 18081，应用仍保持
+`SESSION_COOKIE_SECURE=true`。证书警告未解决之前不能算 PWA 验收成功。只开放代理端口到
+Private/LocalSubnet。现有 Nginx 示例保留作为可选云端参考，不自动安装或改写系统代理。
+
+### 临时模式：仅浏览器的可信 LAN HTTP
+
+如仅为现场调试，可设置 `APP_HOST=0.0.0.0`、`SESSION_COOKIE_SECURE=false`，继续保持
+`APP_ENV=production`、PostgreSQL 和强 SECRET_KEY。访问 `http://店铺固定IP:18081`，只对
+Private/LocalSubnet 开放该端口。HTTP 传输不加密，此模式不能作为完整 PWA/摄像头方案，不能
+在公网使用。切换 HTTPS 后立即恢复 Secure Cookie，退出并重新登录。所有模式均保留 HttpOnly、
+SameSite 和 CSRF；不把凭据放入浏览器持久化存储。
+
+## 本轮脚本操作补充
+
+- `start.ps1` 先验证运行记录，再启动 `app.runner`。runner 等待数据库、执行 Alembic、随后
+  启动 Uvicorn。交互模式等待 `/health` 成功；失败查看日志，不重复盲目启动。
+- 初次手动启动验收后，先 `stop.ps1` 再安装并启动计划任务，避免两套进程占同一端口。
+- `restart.ps1` 若检测到已安装任务，继续用计划任务启动，不改成独立无监督进程。
+- 新 PID 文件含开始时间和进程路径。升级前若存在旧版纯数字 PID 文件，先核实并停止旧进程，
+  再删除旧文件。脚本不猜测不匹配 PID 的归属。
+- 应用日志位于 `LOG_DIR/application.log`，运行中每 10 MiB 轮转，保留 5 份。启动、退出、
+  数据库不可用、迁移失败和运行异常记录在其中，异常参数为避免密码泄漏而省略。
+- 查看日志：`Get-Content .\logs\application.log -Tail 100 -Wait`（LOG_DIR 自定义时替换路径）。
+- 使用虚拟环境创建管理员：`.\.venv\Scripts\python.exe -m app.cli create-admin`，不能依赖
+  系统 `python` 恰好指向该虚拟环境。
+- 按 `backup-and-restore.md` 安装每日备份任务、验证隔离恢复后，才正式切换店员客户端。
+- PowerShell 静态解析：`scripts\windows\check-syntax.ps1`。解析通过不能代替 Windows 10
+  实际开机、停止子进程、权限和手机验收。
