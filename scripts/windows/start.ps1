@@ -5,22 +5,44 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
 Import-InventoryEnvironment
 Initialize-InventoryDirectories
-Invoke-InventoryLogRotation
-$python = Get-InventoryPython
-Set-Location $ProjectRoot
-& $python -m alembic upgrade head
-if ($LASTEXITCODE -ne 0) { throw "Alembic migration failed with exit code $LASTEXITCODE" }
-$hostAddress = if ($env:APP_HOST) { $env:APP_HOST } else { '0.0.0.0' }
-$port = if ($env:APP_PORT) { $env:APP_PORT } else { '18081' }
-$level = if ($env:LOG_LEVEL) { $env:LOG_LEVEL.ToLowerInvariant() } else { 'info' }
-$args = @('-m','uvicorn','app.main:app','--host',$hostAddress,'--port',$port,'--log-level',$level,'--no-access-log')
+$lockPath = Join-Path $RuntimeDir 'startup.lock'
+$startupLock = $null
+try {
+    $startupLock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None')
+    if (Get-OwnedInventoryProcess) { throw 'Inventory is already running. Use health-check.ps1 or restart.ps1.' }
+    $python = Get-InventoryPython
+    # app.runner waits for PostgreSQL, runs alembic upgrade head, then uvicorn using APP_HOST/APP_PORT.
+    $process = Start-Process -FilePath $python -ArgumentList @('-m', 'app.runner') -WorkingDirectory $ProjectRoot -PassThru
+    # Start-Process can return before the executable path is available. Re-query using the
+    # same API as stop.ps1, and do not persist a partially initialized Process object.
+    $launchedId = $process.Id
+    for ($identityAttempt = 0; $identityAttempt -lt 20; $identityAttempt++) {
+        $identity = Get-Process -Id $launchedId -ErrorAction Stop
+        if ($identity.Path) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    if (-not $identity.Path) { throw 'Started process identity was unavailable; inspect Task Manager.' }
+    @{ id = $process.Id; started = $identity.StartTime.ToUniversalTime().Ticks.ToString(); path = $identity.Path } | ConvertTo-Json | Set-Content -LiteralPath $PidFile -Encoding UTF8
+} finally { if ($startupLock) { $startupLock.Dispose() } }
 if ($Foreground) {
-    Set-Content -LiteralPath $PidFile -Value $PID -Encoding ASCII
-    try { & $python @args 2>&1 | Tee-Object -FilePath (Join-Path $LogDir 'application.log') -Append }
-    finally { Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue }
-    exit $LASTEXITCODE
+    try { $process.WaitForExit(); $code = $process.ExitCode }
+    finally {
+        if (Test-Path $PidFile) {
+            $record = Get-Content $PidFile -Raw | ConvertFrom-Json
+            if ($record.id -eq $process.Id) { Remove-Item $PidFile -Force }
+        }
+    }
+    exit $code
 }
-if (Test-Path $PidFile) { throw "PID file already exists; use health-check.ps1 or stop.ps1: $PidFile" }
-$process = Start-Process -FilePath $python -ArgumentList $args -WorkingDirectory $ProjectRoot -RedirectStandardOutput (Join-Path $LogDir 'application.log') -RedirectStandardError (Join-Path $LogDir 'error.log') -PassThru
-Set-Content -LiteralPath $PidFile -Value $process.Id -Encoding ASCII
-Write-Host "Inventory started (PID $($process.Id), http://${hostAddress}:$port)."
+$port = if ($env:APP_PORT) { $env:APP_PORT } else { '18081' }
+$hostAddress = if ($env:APP_HOST -and $env:APP_HOST -ne '0.0.0.0') { $env:APP_HOST } else { '127.0.0.1' }
+for ($attempt = 0; $attempt -lt 90; $attempt++) {
+    $process.Refresh()
+    if ($process.HasExited) { throw "Startup failed. See $LogDir\application.log" }
+    try {
+        $health = Invoke-RestMethod -Uri "http://${hostAddress}:$port/health" -TimeoutSec 2
+        if ($health.status -eq 'ok') { Write-Host "Inventory and database healthy (PID $($process.Id))."; exit 0 }
+    } catch { }
+    Start-Sleep -Seconds 2
+}
+throw "Startup health timeout. Inspect $LogDir\application.log and stop.ps1 before retrying."

@@ -12,6 +12,7 @@ from app.auth import CurrentUser
 from app.config import settings
 from app.models import InventoryTransaction, Product, User
 from app.schemas.transactions import ReverseResponse, TransactionItem, TransactionPage
+from app.services.alerts import refresh_product_alerts
 
 
 class TransactionError(RuntimeError):
@@ -70,7 +71,7 @@ async def list_transactions(session: AsyncSession, user: CurrentUser, page: int,
     total = int(count or 0)
     rows = (await session.execute(
         select(InventoryTransaction, User.username, reversed_col.label("reversed"))
-        .join(User, User.id == InventoryTransaction.user_id)
+        .outerjoin(User, User.id == InventoryTransaction.user_id)
         .where(*filters)
         .order_by(InventoryTransaction.created_at.desc(), InventoryTransaction.id.desc())
         .offset((page - 1) * page_size).limit(page_size)
@@ -88,7 +89,7 @@ async def list_transactions(session: AsyncSession, user: CurrentUser, page: int,
             barcode=tx.barcode_snapshot, platform=tx.platform_snapshot,
             operation_type=tx.operation_type, quantity_delta=tx.quantity_delta,
             quantity_before=tx.quantity_before, quantity_after=tx.quantity_after,
-            username=username, created_at=tx.created_at, reversed=bool(was_reversed),
+            username=username or "历史用户", created_at=tx.created_at, reversed=bool(was_reversed),
             related_transaction_id=tx.related_transaction_id, can_reverse=can_reverse,
             reverse_block_reason=reason))
     return TransactionPage(items=items, page=page, page_size=page_size, total=total)
@@ -155,6 +156,9 @@ async def reverse_transaction(
                 user_id=user.id, note=f"撤销流水 #{original.id}")
             session.add(reversal_tx)
             await session.flush()
+            product = await session.get(Product, original.product_id, populate_existing=True)
+            assert product is not None
+            await refresh_product_alerts(session, product)
             return ReverseResponse(transaction_id=reversal_tx.id,
                 related_transaction_id=original.id, quantity_after=int(quantity_after),
                 message=f"已撤销 {original.game_name_snapshot}，当前库存 {quantity_after} 件。")

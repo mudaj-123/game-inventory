@@ -38,9 +38,22 @@
             <span aria-hidden="true">💰</span> 连续出库
           </button>
         </div>
+        <button id="admin-button" class="secondary-button" type="button" hidden>库存与预警管理</button>
         <button id="transactions-button" class="secondary-button" type="button">今日流水</button>
       </section>
 
+      <section id="admin-panel" hidden>
+        <h2>库存与预警</h2>
+        <p id="admin-feedback" role="status"></p>
+        <form id="product-search"><label>名称或条码 <input name="q" autocomplete="off"></label><button>查询</button></form>
+        <div id="product-list"></div>
+        <button id="products-prev" type="button">上一页</button><button id="products-next" type="button">下一页</button>
+        <button id="catalog-import" type="button">重新加载服务器条码目录（仅新增）</button>
+        <h3>当前预警</h3><div id="alert-list"></div>
+        <h3>待核实资料</h3><div id="pending-products"></div>
+        <button id="admin-refresh" type="button">刷新预警</button>
+        <button id="admin-back" type="button">返回</button>
+      </section>
       <section id="transactions-panel" hidden><h2>今日流水</h2>
         <p id="transaction-feedback" class="transaction-feedback" role="status" aria-live="polite"></p>
         <div id="transaction-filters" class="transaction-filters" aria-label="流水筛选">
@@ -74,6 +87,7 @@
         <input id="scanner-input" class="scanner-input" type="text" inputmode="none"
                autocomplete="off" autocapitalize="off" spellcheck="false">
         <p id="result" class="result" aria-live="assertive">请扫描 8～14 位商品条码</p>
+        <button id="retry-scan" type="button" hidden>重试上一笔（同一请求）</button>
         <button id="manual-toggle" class="secondary-button" type="button">手动输入条码</button>
         <form id="manual-form" class="manual-form" hidden>
           <label for="manual-barcode">条码（8～14 位数字）</label>
@@ -115,6 +129,7 @@
       </aside>
     </main>
     <script src="/static/transaction-groups.js" defer></script>
+    <script src="/static/scan-request.js" defer></script>
     <script src="/static/app.js" defer></script>
   </body>
 </html>

@@ -7,10 +7,12 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -125,3 +127,20 @@ class InventoryTransaction(Base):
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     product: Mapped[Product] = relationship(back_populates="transactions")
+
+
+class StockAlert(Base):
+    """可关闭的预警历史；同商品同类型最多一个活动预警。"""
+
+    __tablename__ = "stock_alerts"
+    __table_args__ = (
+        CheckConstraint("kind IN ('LOW_STOCK', 'SOLD_OUT', 'OVERSTOCK', 'STALE_STOCK')",
+                        name="ck_stock_alert_kind"),
+        Index("uq_stock_alert_active", "product_id", "kind", unique=True,
+              postgresql_where=text("closed_at IS NULL"), sqlite_where=text("closed_at IS NULL")),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(24))
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

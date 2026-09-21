@@ -17,6 +17,7 @@
   const loginPanel = document.querySelector("#login-panel");
   const sessionBar = document.querySelector("#session-bar");
   const transactionsPanel = document.querySelector("#transactions-panel");
+  const pendingScan = globalThis.ScanRequest.createPending(crypto);
   let csrfToken = null;
   let mode = null;
   let keyBuffer = "";
@@ -24,6 +25,8 @@
   let unknownScanId = null;
 
   const showLogin = () => {
+    mode = null;
+    document.querySelector("#admin-panel").hidden = true;
     csrfToken = null;
     loginPanel.hidden = false;
     homePanel.hidden = true;
@@ -44,6 +47,7 @@
 
   const showHome = (user) => {
     loginPanel.hidden = true; sessionBar.hidden = false; homePanel.hidden = false;
+    document.querySelector("#admin-button").hidden = user.role !== "ADMIN";
     document.querySelector("#current-user").textContent = `${user.username} · ${user.role}`;
   };
 
@@ -97,6 +101,7 @@
   };
 
   const submitBarcode = async (rawBarcode) => {
+    if (submitting) return;
     const barcode = rawBarcode.trim();
     if (!/^[0-9]{8,14}$/.test(barcode)) {
       const message = "条码无效，请扫描 8～14 位数字";
@@ -117,15 +122,19 @@
     readyState.textContent = "正在提交…";
     showResult(`正在处理条码 ${barcode}…`);
     try {
-      const clientScanId = crypto.randomUUID();
+      const request = pendingScan.begin(barcode, mode);
+      const clientScanId = request.client_scan_id;
       const response = await apiFetch("/api/scans", {
         method: "POST",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ barcode, operation: mode, client_scan_id: clientScanId }),
+        body: JSON.stringify(request),
       });
       const payload = await response.json().catch(() => ({}));
-      const message = payload.message || payload.detail || "扫码处理失败";
+      if (response.status < 500 && payload.status) pendingScan.resolve();
+      const labels = { SOLD_OUT: "已售罄", LOW_STOCK: "库存偏低", OVERSTOCK: "库存积压", STALE_STOCK: "长期未销售" };
+      const warnings = (payload.alerts || []).map(kind => labels[kind] || kind).join("、");
+      const message = (payload.message || payload.detail || "扫码处理失败") + (warnings ? ` 提醒：${warnings}` : "");
       if (payload.status === "SUCCESS") {
         showResult(message, "success");
         speak(message);
@@ -134,6 +143,10 @@
         speak(message);
       } else if (payload.status === "UNKNOWN_BARCODE_REQUIRES_INPUT") {
         showResult(message, "error");
+        if (mode === "OUT") {
+          showResult("未登记商品，无法出库。请先核对条码并切换入库登记。", "error");
+          return;
+        }
         unknownScanId = clientScanId;
         unknownBarcode.value = payload.barcode || barcode;
         unknownForm.hidden = false;
@@ -143,8 +156,8 @@
         showResult(message, "error");
         speak(message);
       }
-    } catch (_error) {
-      const message = "网络请求失败，请检查连接后重试";
+    } catch (error) {
+      const message = pendingScan.get() ? "上一笔结果未确认，请点击重试上一笔。不要刷新页面，请先核对流水。" : (error.message || "网络请求失败，请检查连接后重试");
       showResult(message, "error");
       speak(message);
     } finally {
@@ -152,9 +165,18 @@
       scannerInput.value = "";
       keyBuffer = "";
       readyState.textContent = "扫码枪已就绪";
+      document.querySelector("#retry-scan").hidden = !pendingScan.get();
       focusScanner();
     }
   };
+
+  document.querySelector("#retry-scan").addEventListener("click", () => {
+    const pending = pendingScan.get();
+    if (pending) { mode = pending.operation; void submitBarcode(pending.barcode); }
+  });
+  window.addEventListener("beforeunload", (event) => {
+    if (pendingScan.get()) { event.preventDefault(); event.returnValue = ""; }
+  });
 
   const closeUnknownForm = () => {
     unknownForm.reset();
@@ -195,8 +217,8 @@
         showResult(message, "error");
         speak(message);
       }
-    } catch (_error) {
-      const message = "网络请求失败，请检查连接后重试";
+    } catch (error) {
+      const message = pendingScan.get() ? "上一笔结果未确认，请点击重试上一笔。不要刷新页面，请先核对流水。" : (error.message || "网络请求失败，请检查连接后重试");
       showResult(message, "error");
       speak(message);
     } finally {
@@ -266,6 +288,98 @@
   window.addEventListener("offline", updateNetwork);
   updateNetwork();
 
+  let productPage = 1;
+  let adjustmentPending = null;
+  const adminFeedback = document.querySelector("#admin-feedback");
+  const loadProducts = async () => {
+    try {
+      const q = new FormData(document.querySelector("#product-search")).get("q") || "";
+      const response = await apiFetch(`/api/admin/products?q=${encodeURIComponent(q)}&page=${productPage}`);
+      if (!response.ok) throw new Error("读取库存失败");
+      const payload = await response.json();
+      const list = document.querySelector("#product-list"); list.replaceChildren();
+      for (const p of payload.items) {
+        const item = document.createElement("article");
+        const label = document.createElement("p"); label.textContent = `${p.game_name} · ${p.platform} · ${p.barcode} · 库存 ${p.quantity}`;
+        const button = document.createElement("button"); button.textContent = "调整库存"; button.type = "button";
+        button.addEventListener("click", async () => {
+          if (adjustmentPending && adjustmentPending.productId !== p.id) {
+            adminFeedback.textContent = "请先重试上一件商品的调整，核对流水后再继续。"; return;
+          }
+          if (!adjustmentPending) {
+            const value = prompt("调整数量（增加填正数，减少填负数）：");
+            if (value === null) return;
+            const delta = Number(value);
+            if (!Number.isInteger(delta) || !delta) return;
+            const reason = prompt("请填写调整原因："); if (!reason?.trim()) return;
+            adjustmentPending = { productId: p.id, body: { quantity_delta: delta, reason: reason.trim(), client_scan_id: globalThis.ScanRequest.uuid(crypto) } };
+          }
+          button.disabled = true;
+          try {
+            const response = await apiFetch(`/api/admin/products/${p.id}/adjust`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(adjustmentPending.body) });
+            const body = await response.json();
+            if (response.status < 500) adjustmentPending = null;
+            if (!response.ok) throw new Error(body.detail || "调整失败");
+            adminFeedback.textContent = `调整完成，当前库存 ${body.quantity_after}`;
+            await loadProducts(); await loadAlerts();
+          } catch (error) { adminFeedback.textContent = adjustmentPending ? "结果未确认，请再次点击同一商品的调整按钮重试；不要刷新。" : error.message; }
+          finally { button.disabled = false; }
+        });
+        const edit = document.createElement("button"); edit.type = "button"; edit.textContent = "核实/编辑资料";
+        edit.addEventListener("click", async () => {
+          const name = prompt("商品名：", p.game_name); if (!name?.trim()) return;
+          const platform = prompt("平台（PS5/PS4/SWITCH/SWITCH2）：", p.platform); if (!platform) return;
+          const low = prompt("低库存下限：", String(p.low_stock_threshold)); if (low === null) return;
+          const high = prompt("积压上限（留空不设上限）：", p.overstock_threshold === null ? "" : String(p.overstock_threshold)); if (high === null) return;
+          try {
+            const response = await apiFetch(`/api/admin/products/${p.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ game_name: name.trim(), platform, low_stock_threshold: Number(low), overstock_threshold: high.trim() ? Number(high) : null }) });
+            if (!response.ok) throw new Error("保存失败，请核对平台及非负整数阈值");
+            adminFeedback.textContent = "资料已核实，历史流水快照保留。";
+            await loadProducts(); await loadAlerts();
+          } catch (error) { adminFeedback.textContent = error.message; }
+        });
+        item.append(label, button, edit); list.append(item);
+      }
+      document.querySelector("#products-prev").disabled = productPage <= 1;
+      document.querySelector("#products-next").disabled = productPage * 50 >= payload.total;
+    } catch (error) { adminFeedback.textContent = error.message; }
+  };
+  const loadAlerts = async () => {
+    try {
+      const response = await apiFetch("/api/admin/alerts");
+      if (!response.ok) throw new Error("读取预警失败");
+      const payload = await response.json();
+      const names = { LOW_STOCK: "低库存", SOLD_OUT: "售罄", OVERSTOCK: "积压", STALE_STOCK: "长期未销售" };
+      for (const [id, items] of [["alert-list", payload.items], ["pending-products", payload.pending_products]]) {
+        const list = document.querySelector(`#${id}`); list.replaceChildren();
+        for (const item of items) {
+          const p = document.createElement("p"); p.textContent = `${item.game_name} · ${item.barcode}${item.kind ? ` · ${names[item.kind]} · 库存 ${item.quantity}` : ""}`; list.append(p);
+        }
+        if (!items.length) list.textContent = "暂无记录";
+      }
+    } catch (error) { adminFeedback.textContent = error.message; }
+  };
+  document.querySelector("#admin-button").addEventListener("click", () => {
+    homePanel.hidden = true; document.querySelector("#admin-panel").hidden = false;
+    void loadProducts(); void loadAlerts();
+  });
+  document.querySelector("#admin-back").addEventListener("click", () => { document.querySelector("#admin-panel").hidden = true; homePanel.hidden = false; });
+  document.querySelector("#admin-refresh").addEventListener("click", loadAlerts);
+  document.querySelector("#catalog-import").addEventListener("click", async (event) => {
+    event.target.disabled = true;
+    try {
+      const response = await apiFetch("/api/admin/catalog/import", { method: "POST" });
+      const report = await response.json();
+      if (!response.ok) throw new Error(report.detail || "导入失败");
+      adminFeedback.textContent = `新增 ${report.added}，跳过 ${report.skipped}，冲突 ${report.conflicts}，错误 ${report.error_count}。`;
+      for (const error of report.errors || []) adminFeedback.textContent += ` 第 ${error.row} 行：${error.error}；`;
+    } catch (error) { adminFeedback.textContent = error.message; }
+    finally { event.target.disabled = false; }
+  });
+  document.querySelector("#product-search").addEventListener("submit", event => { event.preventDefault(); productPage = 1; void loadProducts(); });
+  document.querySelector("#products-prev").addEventListener("click", () => { productPage--; void loadProducts(); });
+  document.querySelector("#products-next").addEventListener("click", () => { productPage++; void loadProducts(); });
+
   const transactionList = document.querySelector("#transaction-list");
   const transactionFeedback = document.querySelector("#transaction-feedback");
   const transactionStats = document.querySelector("#transaction-stats");
@@ -286,7 +400,7 @@
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? "时间未知" : shanghaiFormatter(withDate).format(date).replaceAll("/", "-");
   };
-  const operationLabel = (operation) => operation === "IN" ? "入库" : operation === "SALE_OUT" ? "出库" : "撤销";
+  const operationLabel = (operation) => operation === "IN" ? "入库" : operation === "SALE_OUT" ? "出库" : operation === "ADJUST" ? "调整" : "撤销";
   const signed = (value) => `${Number(value) > 0 ? "+" : ""}${Number(value) || 0}`;
   const appendText = (parent, tag, text, className = "") => {
     const element = document.createElement(tag);
@@ -455,7 +569,8 @@
     if (response.ok) { const user = await response.json(); csrfToken = user.csrf_token; showHome(user); } else showLogin();
   });
 
-  if ("serviceWorker" in navigator) {
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    let updateRequested = false;
     window.addEventListener("load", async () => {
       const registration = await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
       registration.addEventListener("updatefound", () => {
@@ -467,9 +582,16 @@
         });
       });
       document.querySelector("#apply-update").addEventListener("click", () => {
+        if (pendingScan.get() || submitting || unknownScanId || adjustmentPending) {
+          alert("请先完成或核对当前操作，再更新页面。"); return;
+        }
+        updateRequested = true;
         registration.waiting?.postMessage({ type: "SKIP_WAITING" });
       });
-      navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload());
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        // First install calls clients.claim(); never erase a login or scan in progress.
+        if (updateRequested) window.location.reload();
+      });
     });
   }
 })();

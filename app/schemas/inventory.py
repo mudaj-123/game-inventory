@@ -45,3 +45,4 @@ class ScanResponse(BaseModel):
     quantity_after: int | None = None
     transaction_id: int | None = None
     idempotent_replay: bool = False
+    alerts: list[str] = Field(default_factory=list)
