@@ -15,7 +15,7 @@ Windows 进程身份只按 PID 判断，可能停止错误进程或留下子进�
 ## 本轮实现
 
 - `app/services/alerts.py`、`app/services/admin.py`、`app/api/admin.py`：商品搜索、带原因的
-  幂等 ADJUST 流水、四类预警、资料待核实列表。原有 REVERSAL 可撤销管理员调整。
+  幂等 ADJUST 流水、四类预警、资料待核实列表和核实/阈值编辑。原有 REVERSAL 可撤销管理员调整。
 - `0003_stock_alerts`：只新增预警表及活动预警唯一索引，原商品、用户和流水不重建。
 - `app/static/`：管理页面、扫码即时预警、结果未知时复用原请求 ID、HTTP 下安全随机 UUID
   兼容、出库未知条码不再误引导成入库。
@@ -37,7 +37,7 @@ Windows 进程身份只按 PID 判断，可能停止错误进程或留下子进�
 - 幂等仅防止**同一业务请求**重试。不同 ID 的两次主动扫码代表两件商品，不能凭相同条码误去重。
 - 待核实列表为已建商品中 manually_verified=false 的记录；未知扫码取消后不建立库存商品。
 - 浏览器仅在内存保存待确认请求；刷新/关闭页面前必须核对流水。无离线库存写入队列。
-- 完整账号管理、CSV 导出/上传界面、自动异地加密上传和周/月经营报表不在本轮交付范围。
+- 支持交互创建管理员/店员；完整账号管理、CSV 导出/上传界面、自动异地加密上传和周/月经营报表不在本轮交付范围。
 - 预警管理页刷新会按商品 ID 顺序锁定商品并对账，适合小型店铺；大目录需后续按批优化。
 
 ## 验证与验收边界
@@ -50,3 +50,7 @@ Linux 本地没有 Docker、PostgreSQL 服务和 Windows，不能把跳过的检
 承担 PostgreSQL、官方工具恢复、Docker 构建、Compose 与 Windows PowerShell 解析；需要查看
 对应提交的运行结果。Windows 10 开机/SYSTEM/HDD ACL、真实进程树停止、证书/手机 PWA、
 防火墙和 HID 连扫仍必须按 `windows-deployment.md` 在店铺机验收。
+
+补充验证：首轮远端 CI Run 35561620586 全部通过，含 6 项 PostgreSQL 集成/恢复测试、
+Docker 构建/Compose、PowerShell 5.1 解析。后续补齐商品资料编辑和 Windows 进程烟雾测试后，
+须以最终 PR 提交的 CI 为准。本地新增回归后为 46 passed / 6 postgres skipped。

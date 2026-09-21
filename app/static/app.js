@@ -325,7 +325,20 @@
           } catch (error) { adminFeedback.textContent = adjustmentPending ? "结果未确认，请再次点击同一商品的调整按钮重试；不要刷新。" : error.message; }
           finally { button.disabled = false; }
         });
-        item.append(label, button); list.append(item);
+        const edit = document.createElement("button"); edit.type = "button"; edit.textContent = "核实/编辑资料";
+        edit.addEventListener("click", async () => {
+          const name = prompt("商品名：", p.game_name); if (!name?.trim()) return;
+          const platform = prompt("平台（PS5/PS4/SWITCH/SWITCH2）：", p.platform); if (!platform) return;
+          const low = prompt("低库存下限：", String(p.low_stock_threshold)); if (low === null) return;
+          const high = prompt("积压上限（留空不设上限）：", p.overstock_threshold === null ? "" : String(p.overstock_threshold)); if (high === null) return;
+          try {
+            const response = await apiFetch(`/api/admin/products/${p.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ game_name: name.trim(), platform, low_stock_threshold: Number(low), overstock_threshold: high.trim() ? Number(high) : null }) });
+            if (!response.ok) throw new Error("保存失败，请核对平台及非负整数阈值");
+            adminFeedback.textContent = "资料已核实，历史流水快照保留。";
+            await loadProducts(); await loadAlerts();
+          } catch (error) { adminFeedback.textContent = error.message; }
+        });
+        item.append(label, button, edit); list.append(item);
       }
       document.querySelector("#products-prev").disabled = productPage <= 1;
       document.querySelector("#products-next").disabled = productPage * 50 >= payload.total;

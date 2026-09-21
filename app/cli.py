@@ -32,6 +32,9 @@ def main() -> None:
     admin = subparsers.add_parser("create-admin", help="创建首个管理员")
     admin.add_argument("--username", help="省略时安全交互输入")
     admin.add_argument("--password", help="明确传入（可能出现在 shell 历史中）")
+    staff = subparsers.add_parser("create-staff", help="创建店员（交互输入密码）")
+    staff.add_argument("--username")
+    staff.set_defaults(password=None)
     args = parser.parse_args()
     if args.command == "import-catalog":
         asyncio.run(_import(args.path, cast(ImportMode, args.mode)))
@@ -40,15 +43,19 @@ def main() -> None:
         password = args.password or getpass.getpass("管理员密码: ")
         if not username or not password:
             parser.error("用户名和密码不得为空")
-        asyncio.run(_create_admin(username, password))
+        asyncio.run(
+            _create_admin(
+                username, password, "STAFF" if args.command == "create-staff" else "ADMIN"
+            )
+        )
 
 
-async def _create_admin(username: str, password: str) -> None:
+async def _create_admin(username: str, password: str, role: str = "ADMIN") -> None:
     async with async_session_factory() as session, session.begin():
         if await session.scalar(select(User.id).where(User.username == username)) is not None:
             raise SystemExit(f"错误：用户名 {username!r} 已存在")
-        session.add(User(username=username, password_hash=hash_password(password), role="ADMIN"))
-    print(f"管理员 {username!r} 创建成功")
+        session.add(User(username=username, password_hash=hash_password(password), role=role))
+    print(f"{role} {username!r} 创建成功")
 
 
 if __name__ == "__main__":

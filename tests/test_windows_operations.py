@@ -49,7 +49,7 @@ def test_stop_checks_process_identity_and_stops_supervisor() -> None:
     common = (WINDOWS / "common.ps1").read_text(encoding="utf-8")
     stop = (WINDOWS / "stop.ps1").read_text(encoding="utf-8")
     assert 'StartTime.ToUniversalTime()' in common and '$process.Path' in common
-    assert stop.index('Stop-ScheduledTask') < stop.index('Stop-Process')
+    assert stop.index('Stop-ScheduledTask') < stop.index('taskkill.exe')
 
 
 def test_windows_environment_template_contains_no_real_secret() -> None:

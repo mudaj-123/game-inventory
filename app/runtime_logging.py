@@ -31,10 +31,10 @@ class SafeFormatter(logging.Formatter):
         return re.sub(r"postgres(?:ql)?(?:\+\w+)?://\S+", "[REDACTED_URL]", message)
 
 
-def configure_logging() -> None:
+def configure_logging(filename: str = "application.log") -> None:
     settings.log_dir.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(
-        settings.log_dir / "application.log",
+        settings.log_dir / filename,
         maxBytes=10 * 1024 * 1024,
         backupCount=5,
         encoding="utf-8",

@@ -196,7 +196,6 @@ def drill(dump: Path) -> dict[str, dict[str, object]]:
 def main() -> None:
     from app.runtime_logging import configure_logging
 
-    configure_logging()
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     b = sub.add_parser("backup")
@@ -212,6 +211,7 @@ def main() -> None:
     d.add_argument("dump", type=Path)
     sub.add_parser("fingerprint")
     args = parser.parse_args()
+    configure_logging(f"{args.command}.log")
     try:
         if args.command == "backup":
             if not args.directory:

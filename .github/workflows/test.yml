@@ -47,6 +47,21 @@ jobs:
       - run: node --check app/static/transaction-groups.js
       - run: node --test tests/js/*.test.cjs
       - run: node --check app/static/service-worker.js
+      - name: Browser workflow and lost-response retry
+        env:
+          NODE_PATH: /tmp/inventory-browser/node_modules
+        run: |
+          npm install --prefix /tmp/inventory-browser --no-save playwright@1.62.1
+          /tmp/inventory-browser/node_modules/.bin/playwright install --with-deps chromium
+          uv run python -m app.cli create-admin --username browser-admin --password test-password
+          uv run uvicorn app.main:app --host 127.0.0.1 --port 18085 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18085/health; then break; fi
+            sleep 1
+          done
+          node tests/browser-smoke.cjs
       - run: docker build --label org.opencontainers.image.revision="$GITHUB_SHA" -t game-inventory:test .
       - run: cp .env.production.example .env.production
       - run: docker compose --env-file .env.production -f docker-compose.prod.yml config
@@ -84,3 +99,17 @@ jobs:
       - name: Parse all operational scripts with Windows PowerShell 5.1
         shell: powershell
         run: .\scripts\windows\check-syntax.ps1
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.3"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen --all-extras
+      - name: Native Windows process lifecycle (disposable SQLite test database)
+        shell: powershell
+        run: .\scripts\windows\smoke-test.ps1
+      - name: Show sanitized application log on failure
+        if: failure()
+        shell: powershell
+        run: Get-Content .\logs\application.log -Tail 60 -ErrorAction SilentlyContinue

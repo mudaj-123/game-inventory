@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import CurrentUser, require_admin, verify_csrf
 from app.database import get_db_session
 from app.models import User
-from app.schemas.admin import AdjustmentRequest
+from app.schemas.admin import AdjustmentRequest, ProductUpdate
 from app.schemas.auth import UserResponse
 from app.services.admin import adjust_stock
 from app.services.inventory import InventoryConflictError
@@ -58,6 +58,8 @@ async def products(
                 "quantity": p.quantity,
                 "identification_status": p.identification_status,
                 "manually_verified": p.manually_verified,
+                "low_stock_threshold": p.low_stock_threshold,
+                "overstock_threshold": p.overstock_threshold,
             }
             for p in records
         ],
@@ -119,3 +121,34 @@ async def adjust(
     except (InventoryConflictError, IntegrityError) as error:
         detail = str(error) if isinstance(error, InventoryConflictError) else "请求编号冲突"
         raise HTTPException(status_code=409, detail=detail) from error
+
+
+@router.patch("/products/{product_id}")
+async def update_product(
+    product_id: int,
+    body: ProductUpdate,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
+    _csrf: Annotated[None, Depends(verify_csrf)],
+) -> dict[str, object]:
+    from app.models import Product
+    from app.services.alerts import refresh_product_alerts
+    from app.services.catalog import normalize_name
+
+    async with session.begin():
+        product = await session.scalar(
+            select(Product).where(Product.id == product_id).with_for_update()
+        )
+        if product is None:
+            raise HTTPException(status_code=404, detail="商品不存在")
+        product.game_name = body.game_name
+        product.normalized_name = normalize_name(body.game_name)
+        product.platform = body.platform
+        product.low_stock_threshold = body.low_stock_threshold
+        product.overstock_threshold = body.overstock_threshold
+        product.manually_verified = True
+        product.identification_status = "CONFIRMED"
+        product.metadata_source = "MANUAL"
+        await session.flush()
+        alerts = await refresh_product_alerts(session, product)
+        return {"id": product.id, "alerts": alerts}

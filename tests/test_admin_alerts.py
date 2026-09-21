@@ -102,3 +102,25 @@ async def test_inventory_search_and_admin_only_dashboard(raw_client, factory):
     assert response.json()["total"] == 1
     assert response.json()["items"][0]["barcode"] == "00001111"
     assert raw_client.get("/api/admin/products?q=%25").json()["total"] == 0
+
+
+async def test_product_confirmation_changes_thresholds_but_keeps_snapshots(raw_client, factory):
+    product = await seed_product(factory)
+    csrf = login(raw_client, "admin")
+    original = scan(raw_client, csrf)
+    response = raw_client.patch(
+        f"/api/admin/products/{product.id}",
+        json={
+            "game_name": "新名称",
+            "platform": "PS4",
+            "low_stock_threshold": 0,
+            "overstock_threshold": 0,
+        },
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert response.status_code == 200
+    assert response.json()["alerts"] == ["OVERSTOCK"]
+    assert raw_client.get("/api/admin/alerts").json()["pending_products"] == []
+    async with factory() as session:
+        tx = await session.get(InventoryTransaction, original["transaction_id"])
+        assert tx.game_name_snapshot == "撤销游戏" and tx.platform_snapshot == "PS5"

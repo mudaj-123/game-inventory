@@ -91,3 +91,12 @@ def test_log_formatter_redacts_credentials_and_exception_values(pg_config, monke
     assert "session-secret" not in formatted and "secret@pass" not in formatted
     assert "password FROM" not in formatted
     assert "exception=ValueError" in formatted
+
+
+def test_secure_cookie_defaults_and_explicit_lan_override():
+    from app.config import Settings
+
+    assert Settings(_env_file=None, app_env="production").secure_cookie
+    assert not Settings(
+        _env_file=None, app_env="production", session_cookie_secure=False
+    ).secure_cookie

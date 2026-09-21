@@ -29,7 +29,7 @@
 
 - 交互启动/停止/重启：`start.ps1`、`stop.ps1`、`restart.ps1`。
 - 自动任务状态：`Get-ScheduledTask -TaskName GameInventory`；运行历史在 Task Scheduler 的
-  Operational 日志。应用日志在 `logs\application.log` 和 `logs\error.log`。
+  Operational 日志。应用日志在 `LOG_DIR\application.log`。
 - 健康检查：`health-check.ps1` 同时验证 FastAPI 和数据库。503 时先查 PostgreSQL Windows
   Service、磁盘、`.env` 与日志。迁移失败会阻止 Uvicorn 启动，不会静默提供旧 Schema。
 - 更新：先备份，停止任务/应用，保留旧提交和 dump，拉取已测试版本，运行 setup、启动和健康
@@ -88,3 +88,10 @@ SameSite 和 CSRF；不把凭据放入浏览器持久化存储。
 - 按 `backup-and-restore.md` 安装每日备份任务、验证隔离恢复后，才正式切换店员客户端。
 - PowerShell 静态解析：`scripts\windows\check-syntax.ps1`。解析通过不能代替 Windows 10
   实际开机、停止子进程、权限和手机验收。
+
+原生备份/恢复/演练日志分别为 LOG_DIR 下的 `backup.log`、`restore.log`、`drill.log`，
+与常驻应用日志分开轮转，避免 Windows 跨进程同时重命名同一日志文件。
+
+创建店员：`.\.venv\Scripts\python.exe -m app.cli create-staff`（交互输入密码，不回显）。
+管理员可在“库存与预警管理”搜索商品、核实名称/平台及预警阈值、填写原因调整库存；
+修改资料不改变任何历史流水中的商品快照。
