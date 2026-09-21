@@ -62,7 +62,8 @@
 cp .env.example .env
 ```
 
-默认数据库为 `sqlite+aiosqlite:///./inventory.db`。正式 PostgreSQL 可改为：
+默认数据库为 `sqlite+aiosqlite:///./inventory.db`，仅用于开发与单元测试；正式环境必须使用
+PostgreSQL。正式 PostgreSQL 可改为：
 
 ```dotenv
 DATABASE_URL=postgresql+asyncpg://inventory_user:password@db:5432/inventory
@@ -89,6 +90,28 @@ uvicorn app.main:app --reload
 Windows 用户可按原步骤手工创建虚拟环境并执行 `python -m pip install -e '.[dev]'`。
 
 浏览器访问 `http://127.0.0.1:8000/health`，预期返回应用状态。启动前必须执行 `alembic upgrade head` 应用库存核心及认证流水迁移。
+健康端点会实际查询数据库；数据库连接失败时返回 HTTP 503，且不泄露连接字符串。
+
+## Windows 店铺生产部署（默认方案）
+
+店铺电脑原生运行 PostgreSQL 16、Python 3.12 和 FastAPI，不需要 Docker Desktop。完整的安装、
+开机自动启动、Private/LAN 防火墙、HTTPS/PWA、Tailscale 和真实设备验收步骤见
+[`docs/windows-deployment.md`](docs/windows-deployment.md)。配置模板为 `.env.windows.example`，
+PowerShell 工具位于 `scripts/windows/`：
+
+```powershell
+.\scripts\windows\setup.ps1
+.\scripts\windows\start.ps1
+.\scripts\windows\health-check.ps1
+.\scripts\windows\install-service.ps1
+```
+
+安装脚本使用 Windows 内置 Task Scheduler 创建 SYSTEM 开机任务，不依赖 NSSM/WinSW。应用端口
+可用 `APP_HOST` / `APP_PORT` 配置；PostgreSQL 必须仅监听 localhost，手机只访问 Web。备份使用
+官方 `pg_dump`，生产备份目录应指向 HDD，并必须完成隔离恢复演练。详见
+[`docs/backup-and-restore.md`](docs/backup-and-restore.md) 和
+[`docs/migration.md`](docs/migration.md)。系统边界及 Docker 的备用定位见
+[`docs/architecture.md`](docs/architecture.md)。
 
 ### 创建首个管理员
 
@@ -132,11 +155,14 @@ python3.12 -m ruff check .
 
 测试覆盖健康检查、认证权限、库存与 CSV 导入、移动扫码、幂等与撤销，并包含需要真实 PostgreSQL 的并发集成测试。部署结构测试还会检查 Docker、Compose、环境变量模板和维护脚本。
 
-## 当前限制与后续阶段
+## 当前限制
 
-尚未实现目录导出、预警报表和完整用户管理界面。数据库升级必须继续使用 Alembic，不能以 `Base.metadata.create_all()` 代替，也不能接入第三方在线条码识别作为核心依赖。
+尚未实现目录导出、预警报表和完整用户管理界面。Windows 脚本已纳入仓库静态检查，但计划任务、
+防火墙、原生 PostgreSQL、HTTPS/PWA、手机和真实 HID 扫码仍须在 Windows 10 店铺机验收。数据库
+升级必须继续使用 Alembic，不能以 `Base.metadata.create_all()` 代替，也不能接入第三方在线条码
+识别作为核心依赖。
 
-## 腾讯云 Linux 生产部署
+## 腾讯云 Linux / Docker 可选部署
 
 该方案只管理本仓库的 `app` 与 `db`，不会管理、停止或修改服务器上的 OpenClaw。应用仅在宿主机回环地址 `127.0.0.1` 监听，宿主机端口由 `.env.production` 中的 `APP_HOST_PORT` 控制，默认示例为 `18080`；这只是可配置的默认值，并非固定要求。若该端口已被占用，可设置 `APP_HOST_PORT=18081`。PostgreSQL **没有宿主机端口映射**，并位于 Compose 内部网络。公网访问必须使用独立域名和 HTTPS；生产模式的会话 Cookie 会启用 `Secure`，直接使用 HTTP 将无法正常、安全地登录。
 

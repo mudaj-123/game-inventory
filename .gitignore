@@ -20,6 +20,7 @@ build/
 .env.*
 !.env.example
 !.env.production.example
+!.env.windows.example
 
 # Runtime data
 *.db
@@ -30,6 +31,8 @@ build/
 data/exports/*
 !data/exports/.gitkeep
 backups/
+logs/
+*.pid
 
 # Editors and operating systems
 .vscode/*
