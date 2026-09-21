@@ -152,3 +152,22 @@ async def update_product(
         await session.flush()
         alerts = await refresh_product_alerts(session, product)
         return {"id": product.id, "alerts": alerts}
+
+
+@router.post("/catalog/import")
+async def import_local_catalog(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
+    _csrf: Annotated[None, Depends(verify_csrf)],
+) -> dict[str, object]:
+    from app.config import settings
+    from app.services.catalog import import_catalog
+
+    try:
+        async with session.begin():
+            report = await import_catalog(session, settings.local_catalog_path, "ADD_ONLY")
+            return report.as_dict()
+    except (OSError, ValueError) as error:
+        raise HTTPException(
+            status_code=400, detail="目录无法导入，请检查配置的 CSV 文件和表头"
+        ) from error

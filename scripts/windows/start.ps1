@@ -13,7 +13,16 @@ try {
     $python = Get-InventoryPython
     # app.runner waits for PostgreSQL, runs alembic upgrade head, then uvicorn using APP_HOST/APP_PORT.
     $process = Start-Process -FilePath $python -ArgumentList @('-m', 'app.runner') -WorkingDirectory $ProjectRoot -PassThru
-    @{ id = $process.Id; started = $process.StartTime.ToUniversalTime().Ticks.ToString(); path = $process.Path } | ConvertTo-Json | Set-Content -LiteralPath $PidFile -Encoding UTF8
+    # Start-Process can return before the executable path is available. Re-query using the
+    # same API as stop.ps1, and do not persist a partially initialized Process object.
+    $launchedId = $process.Id
+    for ($identityAttempt = 0; $identityAttempt -lt 20; $identityAttempt++) {
+        $identity = Get-Process -Id $launchedId -ErrorAction Stop
+        if ($identity.Path) { break }
+        Start-Sleep -Milliseconds 100
+    }
+    if (-not $identity.Path) { throw 'Started process identity was unavailable; inspect Task Manager.' }
+    @{ id = $process.Id; started = $identity.StartTime.ToUniversalTime().Ticks.ToString(); path = $identity.Path } | ConvertTo-Json | Set-Content -LiteralPath $PidFile -Encoding UTF8
 } finally { if ($startupLock) { $startupLock.Dispose() } }
 if ($Foreground) {
     try { $process.WaitForExit(); $code = $process.ExitCode }

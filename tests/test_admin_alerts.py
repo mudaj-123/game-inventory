@@ -53,7 +53,7 @@ async def test_alert_transitions_refresh_dedup_and_stale_stock(raw_client, facto
     product = await seed_product(factory, quantity=2)
     async with factory() as session, session.begin():
         p = await session.get(Product, product.id)
-        p.overstock_threshold = 2
+        p.overstock_threshold = 3
         p.created_at = datetime.now(UTC) - timedelta(days=40)
     csrf = login(raw_client, "admin")
     for _ in range(2):
@@ -124,3 +124,23 @@ async def test_product_confirmation_changes_thresholds_but_keeps_snapshots(raw_c
     async with factory() as session:
         tx = await session.get(InventoryTransaction, original["transaction_id"])
         assert tx.game_name_snapshot == "撤销游戏" and tx.platform_snapshot == "PS5"
+
+
+async def test_admin_imports_configured_bom_catalog(raw_client, tmp_path, monkeypatch):
+    from app.config import settings
+
+    path = tmp_path / "catalog.csv"
+    path.write_text("barcode,game_name,platform\n00008888,目录游戏,Switch\n", encoding="utf-8-sig")
+    monkeypatch.setattr(settings, "local_catalog_path", path)
+    csrf = login(raw_client, "admin")
+    headers = {"X-CSRF-Token": csrf}
+    result = raw_client.post("/api/admin/catalog/import", headers=headers)
+    assert result.status_code == 200 and result.json()["added"] == 1
+    assert raw_client.post("/api/admin/catalog/import", headers=headers).json()["skipped"] == 1
+    response = raw_client.post(
+        "/api/scans",
+        headers=headers,
+        json={"barcode": "00008888", "operation": "IN", "client_scan_id": str(uuid.uuid4())},
+    )
+    assert response.json()["game_name"] == "目录游戏"
+    assert response.json()["barcode"] == "00008888"

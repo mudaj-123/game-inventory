@@ -47,6 +47,28 @@ def main() -> None:
         if result.returncode:
             raise RuntimeError("Alembic migration failed; Web server not started")
         logger.info("Alembic upgrade completed")
+        if settings.auto_import_local_catalog:
+            if settings.local_catalog_path.is_file():
+                imported = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "app.cli",
+                        "import-catalog",
+                        str(settings.local_catalog_path),
+                        "--mode",
+                        settings.catalog_import_mode,
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                if imported.returncode:
+                    raise RuntimeError("Local catalog import failed; review configured CSV")
+                logger.info("Local catalog import completed; existing confirmed products preserved")
+            else:
+                logger.warning(
+                    "Local catalog file missing; manual barcode registration remains available"
+                )
         started = time.monotonic()
         uvicorn.run(
             "app.main:app",

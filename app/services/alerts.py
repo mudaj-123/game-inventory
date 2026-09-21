@@ -29,7 +29,7 @@ async def refresh_product_alerts(session: AsyncSession, product: Product) -> lis
             desired.add("LOW_STOCK")
         if (
             product.overstock_threshold is not None
-            and product.quantity > product.overstock_threshold
+            and product.quantity >= product.overstock_threshold
         ):
             desired.add("OVERSTOCK")
         if product.quantity > 0 and last_activity <= now - timedelta(

@@ -40,7 +40,9 @@ function Get-OwnedInventoryProcess {
     if (-not $process) { Remove-Item -LiteralPath $PidFile -Force; return $null }
     # PID reuse must never kill an unrelated program.
     if ($process.StartTime.ToUniversalTime().Ticks.ToString() -ne $record.started -or $process.Path -ne $record.path) {
-        throw 'PID record does not match the running process; inspect it manually before continuing.'
+        $timeMatches = $process.StartTime.ToUniversalTime().Ticks.ToString() -eq $record.started
+        $pathMatches = $process.Path -eq $record.path
+        throw "PID record mismatch (start time matches: $timeMatches; executable matches: $pathMatches); refusing to stop an unverified process."
     }
     return $process
 }

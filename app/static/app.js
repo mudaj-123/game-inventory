@@ -365,6 +365,17 @@
   });
   document.querySelector("#admin-back").addEventListener("click", () => { document.querySelector("#admin-panel").hidden = true; homePanel.hidden = false; });
   document.querySelector("#admin-refresh").addEventListener("click", loadAlerts);
+  document.querySelector("#catalog-import").addEventListener("click", async (event) => {
+    event.target.disabled = true;
+    try {
+      const response = await apiFetch("/api/admin/catalog/import", { method: "POST" });
+      const report = await response.json();
+      if (!response.ok) throw new Error(report.detail || "导入失败");
+      adminFeedback.textContent = `新增 ${report.added}，跳过 ${report.skipped}，冲突 ${report.conflicts}，错误 ${report.error_count}。`;
+      for (const error of report.errors || []) adminFeedback.textContent += ` 第 ${error.row} 行：${error.error}；`;
+    } catch (error) { adminFeedback.textContent = error.message; }
+    finally { event.target.disabled = false; }
+  });
   document.querySelector("#product-search").addEventListener("submit", event => { event.preventDefault(); productPage = 1; void loadProducts(); });
   document.querySelector("#products-prev").addEventListener("click", () => { productPage--; void loadProducts(); });
   document.querySelector("#products-next").addEventListener("click", () => { productPage++; void loadProducts(); });
