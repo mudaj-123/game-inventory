@@ -8,8 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin_router, auth_router, scans_router, transactions_router
-from app.config import settings
+from app.api import admin_router, auth_router, scans_router, system_router, transactions_router
 from app.database import engine
 
 
@@ -33,6 +32,7 @@ app.include_router(scans_router)
 app.include_router(auth_router)
 app.include_router(transactions_router)
 app.include_router(admin_router)
+app.include_router(system_router)
 
 
 @app.get("/", include_in_schema=False)
@@ -51,10 +51,3 @@ async def service_worker() -> FileResponse:
         media_type="text/javascript",
         headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
     )
-
-
-@app.get("/health", tags=["system"])
-async def health_check() -> dict[str, str]:
-    """供开发环境及未来部署健康检查使用。"""
-
-    return {"status": "ok", "environment": settings.app_env}

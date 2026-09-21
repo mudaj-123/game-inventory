@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     session_cookie_name: str = "inventory_session"
     session_max_age_seconds: int = Field(default=43200, ge=300)
     database_url: str = "sqlite+aiosqlite:///./inventory.db"
+    app_host: str = "127.0.0.1"
+    app_port: int = Field(default=18081, ge=1, le=65535)
+    log_level: str = "INFO"
+    log_dir: Path = Path("./logs")
 
     auto_import_local_catalog: bool = True
     local_catalog_path: Path = Path("./data/catalog/barcode_catalog.csv")
