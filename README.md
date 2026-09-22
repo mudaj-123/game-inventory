@@ -301,3 +301,15 @@ curl --fail http://127.0.0.1:18080/health
 列表显示最新商品资料、期间件数及历史最近销售时间。名称/平台变更不拆分库存商品，
 销售报表仍保留历史快照分组。封面从 `LOCAL_COVER_DIR` 中按商品 `cover_filename` 读取；
 支持 PNG/JPEG/WebP，缺失显示占位，登录管理员后才能访问，不依赖外部图床。
+
+### 下载 CSV
+
+管理员库存页面提供“导出当前筛选结果 CSV（全部页）”和“导出人工新增映射 CSV”。
+库存导出沿用最近一次提交查询的条件和排序，不受当前页限制，含期间件数、库存状态、时区和日期。
+人工映射导出不受筛选限制，可直接重新导入本系统；文件使用 UTF-8 BOM，条码保留前导零。
+Excel/WPS 请通过文本导入将条码列设为文本。
+
+服务器命令 `python -m app.cli export-manual-catalog` 原子写入
+`data/exports/manual_catalog_additions.csv`，支持 `--output` 指定路径。
+[导出格式与重新导入说明](data/catalog/README.md) 包含文本保护标记的维护方法。
+CSV 不包含完整用户、历史流水或预警历史，不能代替 PostgreSQL 备份。

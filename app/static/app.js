@@ -28,7 +28,7 @@
     mode = null;
     reportGeneration += 1;
     productGeneration += 1;
-    for (const id of ["product-list", "product-summary", "alert-list", "pending-products", "admin-feedback"]) document.querySelector(`#${id}`).replaceChildren();
+    for (const id of ["product-list", "product-summary", "alert-list", "pending-products", "admin-feedback", "export-feedback"]) document.querySelector(`#${id}`).replaceChildren();
     document.querySelector("#reports-panel").hidden = true;
     document.querySelector("#report-results").replaceChildren();
     document.querySelector("#admin-panel").hidden = true;
@@ -462,6 +462,33 @@
   });
   document.querySelector("#admin-back").addEventListener("click", () => { productGeneration += 1; document.querySelector("#admin-panel").hidden = true; homePanel.hidden = false; });
   document.querySelector("#admin-refresh").addEventListener("click", loadAlerts);
+  const exportCsv = async (button, endpoint, filename) => {
+    const generation = productGeneration;
+    const feedback = document.querySelector("#export-feedback");
+    button.disabled = true; feedback.textContent = "正在生成 CSV…";
+    try {
+      const response = await apiFetch(endpoint);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(typeof body.detail === "string" ? body.detail : "导出失败，请稍后重试");
+      }
+      const blob = await response.blob();
+      if (generation !== productGeneration || document.querySelector("#admin-panel").hidden) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a"); link.href = url; link.download = filename;
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      feedback.textContent = "CSV 已生成，请在浏览器下载记录中查看。条码列请按文本导入。";
+    } catch (error) {
+      if (generation === productGeneration && !document.querySelector("#admin-panel").hidden) feedback.textContent = error.message;
+    } finally { button.disabled = false; }
+  };
+  document.querySelector("#inventory-export").addEventListener("click", (event) => {
+    void exportCsv(event.currentTarget, `/api/admin/exports/inventory.csv?${productQuery}`, "inventory.csv");
+  });
+  document.querySelector("#manual-catalog-export").addEventListener("click", (event) => {
+    void exportCsv(event.currentTarget, "/api/admin/exports/manual-catalog.csv", "manual_catalog_additions.csv");
+  });
   document.querySelector("#catalog-import").addEventListener("click", async (event) => {
     event.target.disabled = true;
     try {

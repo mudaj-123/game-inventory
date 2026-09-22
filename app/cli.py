@@ -13,6 +13,7 @@ from app.auth.security import hash_password
 from app.database import async_session_factory
 from app.models import User
 from app.services.catalog import ImportMode, import_catalog
+from app.services.exports import create_export, save_export
 
 
 async def _import(path: Path, mode: ImportMode) -> None:
@@ -29,6 +30,9 @@ def main() -> None:
     command.add_argument(
         "--mode", choices=["ADD_ONLY", "UPDATE_UNVERIFIED", "FORCE"], default="ADD_ONLY"
     )
+    export = subparsers.add_parser("export-manual-catalog", help="原子导出人工条码映射 CSV")
+    export.add_argument("--output", type=Path,
+                        default=Path("data/exports/manual_catalog_additions.csv"))
     admin = subparsers.add_parser("create-admin", help="创建首个管理员")
     admin.add_argument("--username", help="省略时安全交互输入")
     admin.add_argument("--password", help="明确传入（可能出现在 shell 历史中）")
@@ -38,6 +42,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "import-catalog":
         asyncio.run(_import(args.path, cast(ImportMode, args.mode)))
+    elif args.command == "export-manual-catalog":
+        asyncio.run(_export_manual(args.output))
     else:
         username = (args.username or input("管理员用户名: ")).strip()
         password = args.password or getpass.getpass("管理员密码: ")
@@ -48,6 +54,13 @@ def main() -> None:
                 username, password, "STAFF" if args.command == "create-staff" else "ADMIN"
             )
         )
+
+
+async def _export_manual(path: Path) -> None:
+    async with async_session_factory() as session:
+        file = await create_export(session)
+    save_export(file, path)
+    print(f"人工映射已导出：{path}")
 
 
 async def _create_admin(username: str, password: str, role: str = "ADMIN") -> None:

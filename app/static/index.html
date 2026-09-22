@@ -94,6 +94,10 @@
         <p id="product-summary" role="status" aria-live="polite"></p>
         <div id="product-list"></div>
         <button id="products-prev" type="button">上一页</button><button id="products-next" type="button">下一页</button>
+        <button id="inventory-export" type="button">导出当前筛选结果 CSV（全部页）</button>
+        <button id="manual-catalog-export" type="button">导出人工新增映射 CSV</button>
+        <p>库存导出使用最近一次点击“查询”的条件。人工映射导出不受库存筛选限制。Excel 请用“从文本/CSV 导入”，把条码列设为文本以保留前导零。</p>
+        <p id="export-feedback" role="status" aria-live="polite"></p>
         <button id="catalog-import" type="button">重新加载服务器条码目录（仅新增）</button>
         <h3>当前预警</h3><div id="alert-list"></div>
         <h3>待核实资料</h3><div id="pending-products"></div>
