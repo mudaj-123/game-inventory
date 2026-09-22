@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import admin_router, auth_router, scans_router, system_router, transactions_router
+from app.api.reports import router as reports_router
 from app.database import engine
 
 
@@ -32,6 +33,7 @@ app.include_router(scans_router)
 app.include_router(auth_router)
 app.include_router(transactions_router)
 app.include_router(admin_router)
+app.include_router(reports_router)
 app.include_router(system_router)
 
 

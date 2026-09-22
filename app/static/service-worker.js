@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "game-inventory-shell-v4";
+const CACHE_NAME = "game-inventory-shell-v5";
 const APP_SHELL = [
   "/",
   "/static/index.html",

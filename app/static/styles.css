@@ -100,3 +100,9 @@ h2 { text-align: center; font-size: clamp(1.7rem, 8vw, 2.5rem); }
   .reverse-dialog dl { grid-template-columns: 1fr; }
   .reverse-dialog dd { margin-bottom: .25rem; }
 }
+
+.report-table-scroll { max-width: 100%; overflow-x: auto; }
+.report-table-scroll table { border-collapse: collapse; width: 100%; }
+.report-table-scroll th, .report-table-scroll td { text-align: left; padding: .5rem; border-bottom: 1px solid #ccd5df; overflow-wrap: anywhere; }
+.report-table-scroll caption { text-align: left; font-size: .85rem; }
+#report-dates input { max-width: 100%; box-sizing: border-box; }

@@ -26,6 +26,9 @@
 
   const showLogin = () => {
     mode = null;
+    reportGeneration += 1;
+    document.querySelector("#reports-panel").hidden = true;
+    document.querySelector("#report-results").replaceChildren();
     document.querySelector("#admin-panel").hidden = true;
     csrfToken = null;
     loginPanel.hidden = false;
@@ -48,6 +51,7 @@
   const showHome = (user) => {
     loginPanel.hidden = true; sessionBar.hidden = false; homePanel.hidden = false;
     document.querySelector("#admin-button").hidden = user.role !== "ADMIN";
+    document.querySelector("#reports-button").hidden = user.role !== "ADMIN";
     document.querySelector("#current-user").textContent = `${user.username} · ${user.role}`;
   };
 
@@ -290,6 +294,72 @@
 
   let productPage = 1;
   let adjustmentPending = null;
+  let reportPage = 1;
+  let reportGeneration = 0;
+  let reportQuery = new URLSearchParams({ period: "7d" });
+  const reportPanel = document.querySelector("#reports-panel");
+  const reportStatus = document.querySelector("#report-status");
+  const reportResults = document.querySelector("#report-results");
+  const reportPrev = document.querySelector("#report-prev");
+  const reportNext = document.querySelector("#report-next");
+  const loadReport = async () => {
+    const generation = ++reportGeneration;
+    reportPrev.disabled = true; reportNext.disabled = true;
+    reportResults.replaceChildren(); reportStatus.textContent = "正在统计…";
+    try {
+      const query = new URLSearchParams(reportQuery);
+      query.set("page", String(reportPage));
+      const response = await apiFetch(`/api/admin/reports/sales?${query}`);
+      const data = await response.json();
+      if (generation !== reportGeneration || reportPanel.hidden) return;
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "请检查日期范围（最多 366 天）");
+      reportStatus.textContent = `${data.start} 至 ${data.end} · ${data.timezone} · 出库 ${data.totals.sold} · 撤销 ${data.totals.reversed} · 净出库 ${data.totals.net}`;
+      const table = (title, headings, rows) => {
+        const heading = document.createElement("h3"); heading.textContent = title;
+        const container = document.createElement("div"); container.className = "report-table-scroll";
+        const element = document.createElement("table");
+        const caption = document.createElement("caption"); caption.textContent = title;
+        element.append(caption);
+        const head = element.createTHead().insertRow();
+        for (const text of headings) { const cell = document.createElement("th"); cell.scope = "col"; cell.textContent = text; head.append(cell); }
+        const body = element.createTBody();
+        for (const values of rows) { const row = body.insertRow(); for (const value of values) row.insertCell().textContent = String(value); }
+        container.append(element); reportResults.append(heading, container);
+      };
+      table("每日件数", ["日期", "出库", "撤销", "净出库"], data.daily.map(r => [r.date, r.sold, r.reversed, r.net]));
+      table("平台件数", ["平台", "出库", "撤销", "净出库"], data.platforms.map(r => [r.platform, r.sold, r.reversed, r.net]));
+      table(`游戏销量 · 第 ${data.page} 页 · 共 ${data.game_total} 项（按出库件数降序）`, ["游戏", "条码", "平台", "出库", "撤销", "净出库"], data.games.map(r => [r.game_name, r.barcode, r.platform, r.sold, r.reversed, r.net]));
+      if (!data.game_total) { const empty = document.createElement("p"); empty.textContent = "所选期间没有销售或销售撤销记录。"; reportResults.append(empty); }
+      reportPrev.disabled = reportPage <= 1;
+      reportNext.disabled = data.page * data.page_size >= data.game_total;
+    } catch (error) {
+      if (generation === reportGeneration && !reportPanel.hidden) reportStatus.textContent = error.message;
+    }
+  };
+  document.querySelector("#reports-button").addEventListener("click", () => {
+    homePanel.hidden = true; reportPanel.hidden = false; reportPage = 1; void loadReport();
+  });
+  document.querySelector("#reports-back").addEventListener("click", () => {
+    reportGeneration += 1; reportPanel.hidden = true; homePanel.hidden = false;
+  });
+  document.querySelector("#report-period").addEventListener("change", (event) => {
+    const custom = event.target.value === "custom";
+    document.querySelector("#report-dates").hidden = !custom;
+    document.querySelector("#report-start").required = custom;
+    document.querySelector("#report-end").required = custom;
+  });
+  document.querySelector("#reports-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    reportQuery = new URLSearchParams({ period: document.querySelector("#report-period").value });
+    if (reportQuery.get("period") === "custom") {
+      reportQuery.set("start", document.querySelector("#report-start").value);
+      reportQuery.set("end", document.querySelector("#report-end").value);
+    }
+    reportPage = 1; void loadReport();
+  });
+  reportPrev.addEventListener("click", () => { reportPage -= 1; void loadReport(); });
+  reportNext.addEventListener("click", () => { reportPage += 1; void loadReport(); });
+
   const adminFeedback = document.querySelector("#admin-feedback");
   const loadProducts = async () => {
     try {

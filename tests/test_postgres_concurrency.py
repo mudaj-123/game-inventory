@@ -200,3 +200,25 @@ async def test_concurrent_dashboard_does_not_duplicate_active_alerts(postgres_fa
         count = await session.scalar(select(func.count(StockAlert.id)).where(
             StockAlert.closed_at.is_(None)))
     assert count == 1
+
+
+async def test_sales_report_reads_postgres_sale_and_reversal(postgres_factory) -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.config import settings
+    from app.services.reports import sales_report
+
+    await add_catalog(postgres_factory, "00005555")
+    await run_scan(postgres_factory, request("00005555", "IN"))
+    sale = await run_scan(postgres_factory, request("00005555", "OUT"))
+    async with postgres_factory() as session:
+        user = await session.scalar(select(User).where(User.username == "postgres-staff"))
+        actor = CurrentUser(id=user.id, username=user.username, role="ADMIN", active=True)
+        await session.rollback()
+        await reverse_transaction(session, actor, sale.transaction_id)
+    today = datetime.now(ZoneInfo(settings.app_timezone)).date()
+    async with postgres_factory() as session:
+        report = await sales_report(session, today, today, 1, 50)
+    assert report.totals.model_dump() == {"sold": 1, "reversed": 1, "net": 0}
+    assert report.games[0].barcode == "00005555"

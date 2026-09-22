@@ -39,9 +39,32 @@
           </button>
         </div>
         <button id="admin-button" class="secondary-button" type="button" hidden>库存与预警管理</button>
+        <button id="reports-button" class="secondary-button" type="button" hidden>销售统计</button>
         <button id="transactions-button" class="secondary-button" type="button">今日流水</button>
       </section>
 
+      <section id="reports-panel" hidden>
+        <h2>销售统计</h2>
+        <form id="reports-form" class="unknown-form">
+          <label for="report-period">统计期间</label>
+          <select id="report-period" name="period">
+            <option value="7d">最近 7 天</option><option value="30d">最近 30 天</option>
+            <option value="week">本周</option><option value="month">本月</option>
+            <option value="custom">自选日期</option>
+          </select>
+          <div id="report-dates" hidden>
+            <label>开始日期 <input id="report-start" type="date"></label>
+            <label>结束日期 <input id="report-end" type="date"></label>
+          </div>
+          <button type="submit">查询</button>
+        </form>
+        <p>出库按原始销售件数统计，撤销按撤销发生日单列。净出库＝出库－撤销，可为负数；不统计金额。游戏名称和平台使用历史快照。</p>
+        <p id="report-status" role="status" aria-live="polite"></p>
+        <div id="report-results"></div>
+        <button id="report-prev" type="button" disabled>游戏上一页</button>
+        <button id="report-next" type="button" disabled>游戏下一页</button>
+        <button id="reports-back" type="button">返回</button>
+      </section>
       <section id="admin-panel" hidden>
         <h2>库存与预警</h2>
         <p id="admin-feedback" role="status"></p>
