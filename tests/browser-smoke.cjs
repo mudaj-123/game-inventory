@@ -37,6 +37,16 @@ const { chromium } = require('playwright');
   await page.click('#product-search button[type="submit"]');
   await page.waitForFunction(()=>document.querySelector('#product-summary').textContent.includes('共 1 项'));
   await page.waitForFunction(()=>document.querySelector('#product-list').textContent.includes('期间出库 0 件'));
+  for (const [button, expectedName] of [['#inventory-export','inventory.csv'], ['#manual-catalog-export','manual_catalog_additions.csv']]) {
+    const pendingDownload = page.waitForEvent('download');
+    await page.click(button);
+    const download = await pendingDownload;
+    if (download.suggestedFilename() !== expectedName) throw new Error('Unexpected CSV filename');
+    const stream = await download.createReadStream(); const chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    const content = Buffer.concat(chunks);
+    if (content.subarray(0,3).toString('hex') !== 'efbbbf' || !content.toString('utf8').includes('00007777')) throw new Error('CSV missing BOM or barcode');
+  }
   await page.setViewportSize({width:320,height:740});
   if(await page.evaluate(()=>document.documentElement.scrollWidth > window.innerWidth)) throw new Error('Inventory page overflows mobile viewport');
   await page.click('#admin-back');

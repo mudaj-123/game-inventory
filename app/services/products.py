@@ -1,10 +1,10 @@
 """Database-side inventory filtering, aggregation and bounded pagination; no stock writes."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, case, func, not_, or_, select
+from sqlalchemy import Row, Select, and_, case, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -28,7 +28,7 @@ def cover_path(filename: str | None) -> Path | None:
         return None
 
 
-async def list_inventory(session: AsyncSession, filters: InventoryFilters) -> InventoryPage:
+def inventory_query(filters: InventoryFilters) -> tuple[Select, date, date, list[str]]:
     start, end = report_dates(filters.period, filters.start, filters.end)
     lower, upper = utc_bounds(start, end, ZoneInfo(settings.app_timezone))
     tx = InventoryTransaction
@@ -85,33 +85,39 @@ async def list_inventory(session: AsyncSession, filters: InventoryFilters) -> In
         .outerjoin(CatalogEntry, CatalogEntry.id == Product.catalog_entry_id)
         .where(*conditions)
     )
-    total = int(await session.scalar(select(func.count()).select_from(base.subquery())) or 0)
     sort_column = {
         "id": Product.id, "quantity": Product.quantity, "name": Product.normalized_name,
         "updated": Product.updated_at, "last_sale": stats.c.last_sale,
         "sales": sold, "inbound": inbound, "outbound": sold,
     }[filters.sort]
     ordering = sort_column.desc() if filters.order == "desc" else sort_column.asc()
+    return base.order_by(ordering.nulls_last(), Product.id.asc()), start, end, list(states)
+
+
+def inventory_item(row: Row, states: list[str], *, include_cover: bool = True) -> InventoryItem:
+    product = row[0]
+    item = InventoryItem.model_validate(product)
+    item.last_sale_at = row.last_sale
+    for field in ("last_sale_at", "updated_at"):
+        value = getattr(item, field)
+        if value is not None and value.tzinfo is None:
+            setattr(item, field, value.replace(tzinfo=UTC))
+    item.period_sales = int(row.sold)
+    item.period_inbound = int(row.inbound)
+    item.states = [key for key in states if row._mapping[key]]
+    if include_cover and cover_path(product.cover_filename):
+        item.cover_url = f"/api/admin/products/{product.id}/cover"
+    return item
+
+
+async def list_inventory(session: AsyncSession, filters: InventoryFilters) -> InventoryPage:
+    statement, start, end, states = inventory_query(filters)
+    total = int(await session.scalar(select(func.count()).select_from(
+        statement.order_by(None).subquery(),
+    )) or 0)
     rows = (await session.execute(
-        base.order_by(ordering.nulls_last(), Product.id.asc())
-        .offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
+        statement.offset((filters.page - 1) * filters.page_size).limit(filters.page_size)
     )).all()
-    items = []
-    for row in rows:
-        product = row[0]
-        item = InventoryItem.model_validate(product)
-        item.last_sale_at = row.last_sale
-        # SQLite test fixtures omit timezone information; production timestamptz does not.
-        for field in ("last_sale_at", "updated_at"):
-            value = getattr(item, field)
-            if value is not None and value.tzinfo is None:
-                setattr(item, field, value.replace(tzinfo=UTC))
-        item.period_sales = int(row.sold)
-        item.period_inbound = int(row.inbound)
-        item.states = [key for key in states if row._mapping[key]]
-        item.cover_url = f"/api/admin/products/{product.id}/cover" if cover_path(
-            product.cover_filename,
-        ) else None
-        items.append(item)
+    items = [inventory_item(row, states) for row in rows]
     return InventoryPage(items=items, total=total, page=filters.page, page_size=filters.page_size,
                          start=start, end=end, timezone=settings.app_timezone)

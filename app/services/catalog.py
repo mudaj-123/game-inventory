@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CatalogEntry
+from app.services.csv_format import decode_catalog_row
 
 BARCODE_PATTERN = re.compile(r"^[0-9]{8,14}$")
 REQUIRED_COLUMNS = {"barcode", "game_name", "platform"}
@@ -72,6 +73,7 @@ def _optional(row: dict[str, str], key: str) -> str | None:
 
 
 def _parse_row(row: dict[str, str], row_number: int, source_file: str) -> dict[str, object]:
+    row = decode_catalog_row(row)
     barcode = (row.get("barcode") or "").strip()
     if not BARCODE_PATTERN.fullmatch(barcode):
         raise ValueError("条码必须是 8～14 位数字")
@@ -121,6 +123,7 @@ async def import_catalog(
             barcode = (row.get("barcode") or "").strip()
             try:
                 values = _parse_row(row, row_number, str(path))
+                barcode = str(values["barcode"])
                 if barcode in seen:
                     report.conflicts += 1
                     report.errors.append(ImportErrorDetail(row_number, barcode, "文件内条码重复"))

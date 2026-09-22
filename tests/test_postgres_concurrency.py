@@ -242,3 +242,33 @@ async def test_inventory_filters_aggregate_on_postgres(postgres_factory) -> None
         assert page.items[0].last_sale_at is not None
         empty = await list_inventory(session, InventoryFilters(sales="none"))
         assert empty.total == 0
+
+
+async def test_csv_exports_and_roundtrip_on_postgres(postgres_factory, tmp_path) -> None:
+    import csv
+    import io
+
+    from app.schemas.products import InventoryFilters
+    from app.services.catalog import import_catalog
+    from app.services.exports import create_export
+
+    await add_catalog(postgres_factory, "00006789")
+    await run_scan(postgres_factory, request("00006789", "IN"))
+    async with postgres_factory() as session, session.begin():
+        product = await session.scalar(select(Product).where(Product.barcode == "00006789"))
+        product.metadata_source = "MANUAL"
+        product.game_name = "=人工修正"
+        product.manually_verified = True
+    async with postgres_factory() as session:
+        with await create_export(session, InventoryFilters(q="00006789")) as file:
+            rows = list(csv.DictReader(io.StringIO(file.read().decode("utf-8-sig"))))
+        assert len(rows) == 1 and rows[0]["barcode"] == "00006789"
+        assert rows[0]["period_inbound"] == "1" and rows[0]["quantity"] == "1"
+        with await create_export(session) as file:
+            path = tmp_path / "manual.csv"
+            path.write_bytes(file.read())
+    async with postgres_factory() as session, session.begin():
+        report = await import_catalog(session, path, "FORCE")
+        assert report.updated == 1 and not report.errors
+        entry = await session.scalar(select(CatalogEntry).where(CatalogEntry.barcode == "00006789"))
+        assert entry.game_name == "=人工修正" and entry.verified
