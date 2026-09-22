@@ -27,6 +27,8 @@
   const showLogin = () => {
     mode = null;
     reportGeneration += 1;
+    productGeneration += 1;
+    for (const id of ["product-list", "product-summary", "alert-list", "pending-products", "admin-feedback"]) document.querySelector(`#${id}`).replaceChildren();
     document.querySelector("#reports-panel").hidden = true;
     document.querySelector("#report-results").replaceChildren();
     document.querySelector("#admin-panel").hidden = true;
@@ -293,6 +295,8 @@
   updateNetwork();
 
   let productPage = 1;
+  let productGeneration = 0;
+  let productQuery = new URLSearchParams();
   let adjustmentPending = null;
   let reportPage = 1;
   let reportGeneration = 0;
@@ -362,15 +366,33 @@
 
   const adminFeedback = document.querySelector("#admin-feedback");
   const loadProducts = async () => {
+    const generation = ++productGeneration;
+    const summary = document.querySelector("#product-summary");
+    document.querySelector("#products-prev").disabled = true;
+    document.querySelector("#products-next").disabled = true;
+    document.querySelector("#product-list").replaceChildren();
+    summary.textContent = "正在查询…";
     try {
-      const q = new FormData(document.querySelector("#product-search")).get("q") || "";
-      const response = await apiFetch(`/api/admin/products?q=${encodeURIComponent(q)}&page=${productPage}`);
-      if (!response.ok) throw new Error("读取库存失败");
+      const query = new URLSearchParams(productQuery); query.set("page", String(productPage));
+      const response = await apiFetch(`/api/admin/products?${query}`);
       const payload = await response.json();
+      if (generation !== productGeneration || document.querySelector("#admin-panel").hidden) return;
+      if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "查询失败，请检查筛选条件及日期范围");
+      summary.textContent = `共 ${payload.total} 项 · 第 ${payload.page} 页 · ${payload.start} 至 ${payload.end} · ${payload.timezone}`;
       const list = document.querySelector("#product-list"); list.replaceChildren();
       for (const p of payload.items) {
         const item = document.createElement("article");
         const label = document.createElement("p"); label.textContent = `${p.game_name} · ${p.platform} · ${p.barcode} · 库存 ${p.quantity}`;
+        const cover = document.createElement("div"); cover.className = "product-cover"; cover.textContent = "暂无封面";
+        if (p.cover_url) {
+          const image = document.createElement("img"); image.src = p.cover_url; image.alt = `${p.game_name}封面`; image.loading = "lazy";
+          image.addEventListener("error", () => { cover.textContent = "暂无封面"; }, { once: true });
+          cover.replaceChildren(image);
+        }
+        const details = document.createElement("p");
+        const states = { normal: "正常", low: "低库存", sold_out: "售罄", overstock: "库存偏多", stale: "长期无销售", pending: "待核实" };
+        const lastSale = p.last_sale_at ? new Date(p.last_sale_at).toLocaleString("zh-CN", { timeZone: payload.timezone }) : "从未销售";
+        details.textContent = `${p.region} · ${p.edition || "标准版/未填写"} · ${p.states.map(state => states[state]).join("、") || "无活动预警"}${p.active ? "" : " · 已停用"} · 期间出库 ${p.period_sales} 件 · 期间入库 ${p.period_inbound} 件 · 最近销售：${lastSale}`;
         const button = document.createElement("button"); button.textContent = "调整库存"; button.type = "button";
         button.addEventListener("click", async () => {
           if (adjustmentPending && adjustmentPending.productId !== p.id) {
@@ -408,17 +430,22 @@
             await loadProducts(); await loadAlerts();
           } catch (error) { adminFeedback.textContent = error.message; }
         });
-        item.append(label, button, edit); list.append(item);
+        item.append(cover, label, details, button, edit); list.append(item);
       }
       document.querySelector("#products-prev").disabled = productPage <= 1;
-      document.querySelector("#products-next").disabled = productPage * 50 >= payload.total;
-    } catch (error) { adminFeedback.textContent = error.message; }
+      document.querySelector("#products-next").disabled = productPage * payload.page_size >= payload.total;
+      if (!payload.items.length) list.textContent = "没有符合条件的商品。";
+    } catch (error) {
+      if (generation === productGeneration && !document.querySelector("#admin-panel").hidden) summary.textContent = error.message;
+    }
   };
   const loadAlerts = async () => {
+    const generation = productGeneration;
     try {
       const response = await apiFetch("/api/admin/alerts");
       if (!response.ok) throw new Error("读取预警失败");
       const payload = await response.json();
+      if (generation !== productGeneration || document.querySelector("#admin-panel").hidden) return;
       const names = { LOW_STOCK: "低库存", SOLD_OUT: "售罄", OVERSTOCK: "积压", STALE_STOCK: "长期未销售" };
       for (const [id, items] of [["alert-list", payload.items], ["pending-products", payload.pending_products]]) {
         const list = document.querySelector(`#${id}`); list.replaceChildren();
@@ -433,7 +460,7 @@
     homePanel.hidden = true; document.querySelector("#admin-panel").hidden = false;
     void loadProducts(); void loadAlerts();
   });
-  document.querySelector("#admin-back").addEventListener("click", () => { document.querySelector("#admin-panel").hidden = true; homePanel.hidden = false; });
+  document.querySelector("#admin-back").addEventListener("click", () => { productGeneration += 1; document.querySelector("#admin-panel").hidden = true; homePanel.hidden = false; });
   document.querySelector("#admin-refresh").addEventListener("click", loadAlerts);
   document.querySelector("#catalog-import").addEventListener("click", async (event) => {
     event.target.disabled = true;
@@ -446,7 +473,19 @@
     } catch (error) { adminFeedback.textContent = error.message; }
     finally { event.target.disabled = false; }
   });
-  document.querySelector("#product-search").addEventListener("submit", event => { event.preventDefault(); productPage = 1; void loadProducts(); });
+  const inventoryForm = document.querySelector("#product-search");
+  const toggleInventoryDates = () => {
+    const custom = inventoryForm.elements.period.value === "custom";
+    document.querySelector("#inventory-dates").hidden = !custom;
+    for (const name of ["start", "end"]) { inventoryForm.elements[name].disabled = !custom; inventoryForm.elements[name].required = custom; }
+  };
+  document.querySelector("#inventory-period").addEventListener("change", toggleInventoryDates);
+  inventoryForm.addEventListener("submit", event => {
+    event.preventDefault(); productQuery = new URLSearchParams(new FormData(inventoryForm)); productPage = 1; void loadProducts();
+  });
+  document.querySelector("#inventory-reset").addEventListener("click", () => {
+    inventoryForm.reset(); toggleInventoryDates(); productQuery = new URLSearchParams(); productPage = 1; void loadProducts();
+  });
   document.querySelector("#products-prev").addEventListener("click", () => { productPage--; void loadProducts(); });
   document.querySelector("#products-next").addEventListener("click", () => { productPage++; void loadProducts(); });
 

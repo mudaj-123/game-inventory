@@ -68,7 +68,30 @@
       <section id="admin-panel" hidden>
         <h2>库存与预警</h2>
         <p id="admin-feedback" role="status"></p>
-        <form id="product-search"><label>名称或条码 <input name="q" autocomplete="off"></label><button>查询</button></form>
+        <form id="product-search" class="unknown-form">
+          <label>搜索名称、别名、条码、平台、地区或版本 <input name="q" maxlength="255" autocomplete="off"></label>
+          <details><summary>筛选和排序</summary>
+            <label>平台 <select name="platform"><option value="">全部平台</option><option>PS5</option><option>PS4</option><option>SWITCH</option><option>SWITCH2</option></select></label>
+            <label>地区（精确匹配） <input name="region" maxlength="16"></label>
+            <label>版本（精确匹配） <input name="edition" maxlength="100"></label>
+            <label>库存状态 <select name="status">
+              <option value="all">全部</option><option value="normal">正常</option><option value="low">低库存</option>
+              <option value="sold_out">售罄</option><option value="overstock">库存偏多</option><option value="stale">长期无销售</option><option value="pending">待核实</option>
+            </select></label>
+            <label>期间销量筛选 <select name="sales"><option value="all">全部</option><option value="none">零销量且有库存</option><option value="low">低销量且有库存</option></select></label>
+            <label>低销量上限（件，最低 1 件） <input name="low_sales_max" type="number" min="1" max="1000000" value="3" required></label>
+            <label>统计期间 <select name="period" id="inventory-period">
+              <option value="30d">最近 30 天</option><option value="7d">最近 7 天</option><option value="week">本周</option><option value="month">本月</option><option value="custom">自选日期</option>
+            </select></label>
+            <div id="inventory-dates" hidden><label>开始日期 <input name="start" type="date" disabled></label><label>结束日期 <input name="end" type="date" disabled></label></div>
+            <label>排序 <select name="sort"><option value="id">商品编号</option><option value="quantity">当前库存</option><option value="name">游戏名称</option><option value="updated">更新时间</option><option value="last_sale">最近销售时间</option><option value="sales">期间销量</option><option value="inbound">期间入库数量</option><option value="outbound">期间出库数量</option></select></label>
+            <label>顺序 <select name="order"><option value="asc">升序</option><option value="desc">降序</option></select></label>
+          </details>
+          <button type="submit">查询</button>
+          <button id="inventory-reset" type="button">重置筛选</button>
+        </form>
+        <p>期间销量／出库为原始销售件数，入库为原始入库件数，不扣除撤销、不含盘点调整。长期无销售按系统设定天数判断；零／低销量按所选期间判断。</p>
+        <p id="product-summary" role="status" aria-live="polite"></p>
         <div id="product-list"></div>
         <button id="products-prev" type="button">上一页</button><button id="products-next" type="button">下一页</button>
         <button id="catalog-import" type="button">重新加载服务器条码目录（仅新增）</button>

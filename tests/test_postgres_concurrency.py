@@ -222,3 +222,23 @@ async def test_sales_report_reads_postgres_sale_and_reversal(postgres_factory) -
         report = await sales_report(session, today, today, 1, 50)
     assert report.totals.model_dump() == {"sold": 1, "reversed": 1, "net": 0}
     assert report.games[0].barcode == "00005555"
+
+
+async def test_inventory_filters_aggregate_on_postgres(postgres_factory) -> None:
+    from app.schemas.products import InventoryFilters
+    from app.services.products import list_inventory
+
+    await add_catalog(postgres_factory, "00006666")
+    for _ in range(3):
+        await run_scan(postgres_factory, request("00006666", "IN"))
+    await run_scan(postgres_factory, request("00006666", "OUT"))
+    async with postgres_factory() as session:
+        page = await list_inventory(session, InventoryFilters(
+            q="00006666", sales="low", low_sales_max=1, sort="sales", order="desc",
+        ))
+        assert page.total == 1
+        assert page.items[0].quantity == 2
+        assert page.items[0].period_sales == 1 and page.items[0].period_inbound == 3
+        assert page.items[0].last_sale_at is not None
+        empty = await list_inventory(session, InventoryFilters(sales="none"))
+        assert empty.total == 0
