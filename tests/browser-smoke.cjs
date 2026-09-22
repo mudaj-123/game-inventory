@@ -32,7 +32,7 @@ const { chromium } = require('playwright');
   await page.click('#admin-back');
   await page.click('[data-mode-button="OUT"]');
   await page.fill('#scanner-input','00007777'); await page.press('#scanner-input','Enter');
-  await page.waitForFunction(()=>document.querySelector('#result').textContent.includes('库存 2'));
+  await page.waitForFunction(()=>document.querySelector('#result').textContent.includes('剩余 2'));
   await page.click('#exit-scan'); await page.click('#reports-button');
   await page.waitForFunction(()=>Array.from(document.querySelectorAll('#report-results tbody tr')).some(row => row.cells[1]?.textContent === '00007777' && row.cells[3]?.textContent === '1'));
   await page.selectOption('#report-period','custom');
