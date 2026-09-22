@@ -1,17 +1,20 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import CurrentUser, require_admin, verify_csrf
 from app.database import get_db_session
-from app.models import User
+from app.models import Product, User
 from app.schemas.admin import AdjustmentRequest, ProductUpdate
 from app.schemas.auth import UserResponse
+from app.schemas.products import InventoryFilters, InventoryPage
 from app.services.admin import adjust_stock
 from app.services.inventory import InventoryConflictError
+from app.services.products import cover_path, list_inventory
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -25,45 +28,33 @@ async def users(
     return [UserResponse(id=user.id, username=user.username, role=user.role) for user in records]
 
 
-@router.get("/products")
+@router.get("/products", response_model=InventoryPage)
 async def products(
+    response: Response,
+    filters: Annotated[InventoryFilters, Query()],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     _: Annotated[CurrentUser, Depends(require_admin)],
-    q: str = "",
-    page: int = 1,
-) -> dict[str, object]:
-    from sqlalchemy import func, or_
+) -> InventoryPage:
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return await list_inventory(session, filters)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
-    from app.models import Product
 
-    page = max(1, page)
-    condition = or_(
-        Product.barcode.contains(q, autoescape=True), Product.game_name.contains(q, autoescape=True)
+@router.get("/products/{product_id}/cover")
+async def product_cover(
+    product_id: int,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[CurrentUser, Depends(require_admin)],
+) -> FileResponse:
+    product = await session.get(Product, product_id)
+    path = cover_path(product.cover_filename) if product else None
+    if path is None:
+        raise HTTPException(status_code=404, detail="没有可用的本地封面")
+    return FileResponse(
+        path, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
     )
-    records = (
-        await session.scalars(
-            select(Product).where(condition).order_by(Product.id).offset((page - 1) * 50).limit(50)
-        )
-    ).all()
-    total = await session.scalar(select(func.count(Product.id)).where(condition))
-    return {
-        "total": total,
-        "page": page,
-        "items": [
-            {
-                "id": p.id,
-                "barcode": p.barcode,
-                "game_name": p.game_name,
-                "platform": p.platform,
-                "quantity": p.quantity,
-                "identification_status": p.identification_status,
-                "manually_verified": p.manually_verified,
-                "low_stock_threshold": p.low_stock_threshold,
-                "overstock_threshold": p.overstock_threshold,
-            }
-            for p in records
-        ],
-    }
 
 
 @router.get("/alerts")
